@@ -20,6 +20,16 @@ const ROLES = {
     description: 'Her gece birini öldürür. Yakalanmamaya çalışır.',
     team: 'evil'
   },
+  SECURITY: {
+    name: '🛡️ Güvenlik',
+    description: 'Her gece bir kişiyi korur. Korunan kişi katil tarafından öldürülemez.',
+    team: 'good'
+  },
+  INNOCENT: {
+    name: '😇 Masum',
+    description: 'Hiçbir özel yeteneği yoktur. Dedektife yardım etmeye çalışır.',
+    team: 'good'
+  },
   SUSPECT: {
     name: '👥 Şüpheli',
     description: 'Rollerini bilmezler. Dedektife yardım etmeye çalışır.',
@@ -31,6 +41,7 @@ const ROLES = {
 const GAME_PHASES = {
   LOBBY: 'lobby',
   ROLE_REVEAL: 'role_reveal',
+  SECURITY: 'security',
   NIGHT: 'night',
   DAY: 'day',
   DISCUSSION: 'discussion',
@@ -56,6 +67,7 @@ function App() {
   const [showRules, setShowRules] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState('disconnected')
   const [firebaseConnected, setFirebaseConnected] = useState(false)
+  const [protectedPlayer, setProtectedPlayer] = useState(null)
 
   // Firebase bağlantısı test et
   useEffect(() => {
@@ -202,23 +214,29 @@ function App() {
     }
 
     // Oyuncu sayısına göre rol dağılımı
-    let killerCount, spyCount = 1, detectiveCount = 1, suspectCount
+    let killerCount, spyCount = 1, detectiveCount = 1, securityCount = 1, innocentCount, suspectCount
     
     if (playerCount === 4) {
       killerCount = 1
+      securityCount = 0
+      innocentCount = 1
       suspectCount = 1
     } else if (playerCount >= 5 && playerCount <= 6) {
       killerCount = 1
-      suspectCount = playerCount - 3 // 2-3 şüpheli
+      innocentCount = 1
+      suspectCount = playerCount - 5 // 0-1 şüpheli
     } else if (playerCount >= 7 && playerCount <= 8) {
       killerCount = 2
-      suspectCount = playerCount - 4 // 3-4 şüpheli
+      innocentCount = 1
+      suspectCount = playerCount - 6 // 1-2 şüpheli
     } else if (playerCount >= 9 && playerCount <= 10) {
       killerCount = 2
-      suspectCount = playerCount - 4 // 5-6 şüpheli
+      innocentCount = 2
+      suspectCount = playerCount - 7 // 2-3 şüpheli
     } else { // 11-12
       killerCount = 3
-      suspectCount = playerCount - 5 // 6-7 şüpheli
+      innocentCount = 2
+      suspectCount = playerCount - 8 // 3-4 şüpheli
     }
 
     // Rolleri oluştur
@@ -226,6 +244,10 @@ function App() {
     for (let i = 0; i < killerCount; i++) roles.push('KILLER')
     for (let i = 0; i < spyCount; i++) roles.push('SPY')
     for (let i = 0; i < detectiveCount; i++) roles.push('DETECTIVE')
+    if (securityCount > 0) {
+      for (let i = 0; i < securityCount; i++) roles.push('SECURITY')
+    }
+    for (let i = 0; i < innocentCount; i++) roles.push('INNOCENT')
     for (let i = 0; i < suspectCount; i++) roles.push('SUSPECT')
 
     // Oyuncuları karıştır ve rolleri ata
@@ -265,12 +287,31 @@ function App() {
         currentPlayerIndex: currentPlayerIndex + 1
       })
     } else {
-      // Gece fazına geç
+      // Güvenlik fazına geç (eğer güvenlik varsa)
+      const hasSecurity = Object.values(gameData.players).some(p => p.role === 'SECURITY' && p.isAlive)
       const gameRef = ref(database, `games/${gameRoomId}`)
-      await update(gameRef, {
-        gamePhase: GAME_PHASES.NIGHT
-      })
+      
+      if (hasSecurity) {
+        await update(gameRef, {
+          gamePhase: GAME_PHASES.SECURITY
+        })
+      } else {
+        await update(gameRef, {
+          gamePhase: GAME_PHASES.NIGHT
+        })
+      }
     }
+  }
+
+  // Oyuncu koru (sadece güvenlik)
+  const protectPlayer = async (targetId) => {
+    if (myRole !== 'SECURITY' || !gameRoomId) return
+
+    const gameRef = ref(database, `games/${gameRoomId}`)
+    await update(gameRef, {
+      protectedPlayer: targetId,
+      gamePhase: GAME_PHASES.NIGHT
+    })
   }
 
   // Oyuncu öldür (sadece katil)
@@ -304,25 +345,46 @@ function App() {
         // Eğer berabere varsa rastgele seç
         const finalTarget = winners[Math.floor(Math.random() * winners.length)]
         
-        // Hedef oyuncuyu öldür
+        // Koruma kontrolü
         const updates = {}
-        updates[`players/${finalTarget}/isAlive`] = false
-        updates[`players/${finalTarget}/diedAt`] = Date.now()
-        updates[`players/${finalTarget}/turnDied`] = gameData.turn
-        updates[`players/${finalTarget}/killedBy`] = 'KILLERS'
-        updates.gamePhase = GAME_PHASES.DAY
-        updates.killerVotes = null // Oyları temizle
+        if (gameData.protectedPlayer === finalTarget) {
+          // Oyuncu korundu, öldürülemez
+          updates.gamePhase = GAME_PHASES.DAY
+          updates.killerVotes = null
+          updates.protectedPlayer = null
+          updates.lastNightResult = 'protected'
+        } else {
+          // Hedef oyuncuyu öldür
+          updates[`players/${finalTarget}/isAlive`] = false
+          updates[`players/${finalTarget}/diedAt`] = Date.now()
+          updates[`players/${finalTarget}/turnDied`] = gameData.turn
+          updates[`players/${finalTarget}/killedBy`] = 'KILLERS'
+          updates.gamePhase = GAME_PHASES.DAY
+          updates.killerVotes = null
+          updates.protectedPlayer = null
+          updates.lastNightResult = 'killed'
+        }
         
         await update(gameRef, updates)
       }
     } else {
-      // Tek katil sistemi (eski sistem)
+      // Tek katil sistemi - koruma kontrolü ile
       const updates = {}
-      updates[`players/${targetId}/isAlive`] = false
-      updates[`players/${targetId}/diedAt`] = Date.now()
-      updates[`players/${targetId}/turnDied`] = gameData.turn
-      updates[`players/${targetId}/killedBy`] = 'KILLER'
-      updates.gamePhase = GAME_PHASES.DAY
+      if (gameData.protectedPlayer === targetId) {
+        // Oyuncu korundu, öldürülemez
+        updates.gamePhase = GAME_PHASES.DAY
+        updates.protectedPlayer = null
+        updates.lastNightResult = 'protected'
+      } else {
+        // Hedef oyuncuyu öldür
+        updates[`players/${targetId}/isAlive`] = false
+        updates[`players/${targetId}/diedAt`] = Date.now()
+        updates[`players/${targetId}/turnDied`] = gameData.turn
+        updates[`players/${targetId}/killedBy`] = 'KILLER'
+        updates.gamePhase = GAME_PHASES.DAY
+        updates.protectedPlayer = null
+        updates.lastNightResult = 'killed'
+      }
       
       await update(gameRef, updates)
     }
@@ -371,12 +433,13 @@ function App() {
       const aliveKillers = alivePlayers.filter(p => p.role === 'KILLER')
       const aliveDetective = alivePlayers.find(p => p.role === 'DETECTIVE')
       const aliveSpy = alivePlayers.find(p => p.role === 'SPY')
+      const aliveSecurity = alivePlayers.find(p => p.role === 'SECURITY')
       const totalAlive = alivePlayers.length
       
       if (aliveKillers.length === 0) {
         // Tüm katiller elendi - İyi takım kazandı
         updates.gamePhase = GAME_PHASES.GAME_OVER
-        updates.winner = 'İyi Takım (Dedektif + Şüpheliler + Casus)'
+        updates.winner = 'İyi Takım (Dedektif + Masum + Şüpheliler + Casus + Güvenlik)'
         updates.winReason = 'Tüm katiller elenmiştir'
       } else if (!aliveDetective) {
         // Dedektif öldü - Katiller kazandı
@@ -395,7 +458,14 @@ function App() {
       } else {
         // Oyun devam ediyor - Yeni tura geç
         updates.turn = (gameData.turn || 1) + 1
-        updates.gamePhase = GAME_PHASES.NIGHT
+        
+        // Güvenlik fazına geç (eğer güvenlik varsa)
+        const hasSecurity = alivePlayers.some(p => p.role === 'SECURITY')
+        if (hasSecurity) {
+          updates.gamePhase = GAME_PHASES.SECURITY
+        } else {
+          updates.gamePhase = GAME_PHASES.NIGHT
+        }
       }
       
       await update(gameRef, updates)
@@ -896,6 +966,46 @@ function App() {
             </div>
           )}
 
+          {/* Güvenlik Fazı */}
+          {gamePhase === GAME_PHASES.SECURITY && (
+            <div className="max-w-2xl mx-auto">
+              <div className="bg-gray-800 rounded-lg p-6">
+                <h2 className="text-2xl font-bold mb-4">🛡️ GÜVENLİK - Tur {gameData.turn}</h2>
+                
+                {myRole === 'SECURITY' ? (
+                  <div>
+                    <div className="bg-blue-900 p-4 rounded-lg mb-4">
+                      <p className="font-bold text-blue-300">🛡️ Güvenlik Seçimi:</p>
+                      <p className="text-sm text-gray-400">
+                        Bu gece koruyacağınız kişiyi seçin. Katil o kişiyi öldüremeyecek.
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      {alivePlayers.filter(p => p.role !== 'SECURITY').map(player => (
+                        <button
+                          key={player.id}
+                          onClick={() => protectPlayer(player.id)}
+                          className="block w-full p-3 bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+                        >
+                          🛡️ {player.name} koru
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center">
+                    <p className="text-gray-300 mb-4">Güvenlik görevde...</p>
+                    <p className="text-sm text-gray-400">
+                      Güvenlik bu gece koruyacağı kişiyi seçiyor...
+                    </p>
+                    <div className="animate-pulse text-6xl mt-4">🛡️</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Gece Fazı */}
           {gamePhase === GAME_PHASES.NIGHT && (
             <div className="max-w-2xl mx-auto">
@@ -981,6 +1091,14 @@ function App() {
             <div className="max-w-4xl mx-auto">
               <div className="bg-gray-800 rounded-lg p-6">
                 <h2 className="text-2xl font-bold mb-4">☀️ GÜNDÜZ - Tur {gameData.turn}</h2>
+                
+                {/* Gece sonucu */}
+                {gameData.lastNightResult === 'protected' && (
+                  <div className="bg-blue-900 p-4 rounded mb-4">
+                    <p className="font-bold text-blue-300">🛡️ Bu gece kimse ölmedi!</p>
+                    <p className="text-sm text-gray-400">Güvenlik başarıyla birini korudu.</p>
+                  </div>
+                )}
                 
                 {/* Ölen oyuncular */}
                 {currentTurnDeadPlayers.map(player => (
