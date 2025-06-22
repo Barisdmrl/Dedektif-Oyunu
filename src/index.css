@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tam ekran arka plan için */
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #111827 0%, #581c87 50%, #111827 100%);
+}
+
+#root {
+  min-height: 100vh;
+}
