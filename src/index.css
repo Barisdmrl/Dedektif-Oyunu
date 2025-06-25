@@ -2,14 +2,432 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Tam ekran arka plan için */
+/* Özel CSS değişkenleri */
+:root {
+  --primary-purple: #8b5cf6;
+  --primary-purple-dark: #7c3aed;
+  --primary-purple-light: #a78bfa;
+  --secondary-blue: #3b82f6;
+  --accent-gold: #f59e0b;
+  --danger-red: #ef4444;
+  --success-green: #10b981;
+  --warning-orange: #f97316;
+  --dark-bg: #0f172a;
+  --dark-surface: #1e293b;
+  --dark-surface-light: #334155;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+}
+
+/* Temel stil ayarları */
+* {
+  box-sizing: border-box;
+}
+
 html, body {
   margin: 0;
   padding: 0;
   min-height: 100vh;
-  background: linear-gradient(135deg, #111827 0%, #581c87 50%, #111827 100%);
+  font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, var(--dark-bg) 0%, #1a1a2e 25%, #16213e 50%, #0f3460 75%, var(--dark-bg) 100%);
+  background-attachment: fixed;
+  color: var(--text-primary);
+  overflow-x: hidden;
 }
 
 #root {
   min-height: 100vh;
+  position: relative;
+}
+
+/* Arka plan animasyonu */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    radial-gradient(circle at 20% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 40% 40%, rgba(245, 158, 11, 0.05) 0%, transparent 50%);
+  animation: backgroundShift 20s ease-in-out infinite;
+  z-index: -1;
+}
+
+@keyframes backgroundShift {
+  0%, 100% { 
+    transform: translateX(0) translateY(0); 
+    opacity: 0.8;
+  }
+  25% { 
+    transform: translateX(-20px) translateY(-10px); 
+    opacity: 1;
+  }
+  50% { 
+    transform: translateX(20px) translateY(10px); 
+    opacity: 0.6;
+  }
+  75% { 
+    transform: translateX(-10px) translateY(20px); 
+    opacity: 1;
+  }
+}
+
+/* Parçacık efekti */
+.particles {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.particle {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: rgba(139, 92, 246, 0.3);
+  border-radius: 50%;
+  animation: float 15s infinite linear;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(100vh) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-100px) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+/* Temel animasyonlar */
+@keyframes fadeIn {
+  from { 
+    opacity: 0; 
+    transform: translateY(20px);
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from { 
+    opacity: 0; 
+    transform: translateX(-50px);
+  }
+  to { 
+    opacity: 1; 
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInRight {
+  from { 
+    opacity: 0; 
+    transform: translateX(50px);
+  }
+  to { 
+    opacity: 1; 
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from { 
+    opacity: 0; 
+    transform: scale(0.9);
+  }
+  to { 
+    opacity: 1; 
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { 
+    transform: scale(1); 
+    opacity: 1;
+  }
+  50% { 
+    transform: scale(1.05); 
+    opacity: 0.9;
+  }
+}
+
+@keyframes bounce {
+  0%, 20%, 53%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40%, 43% {
+    transform: translateY(-10px);
+  }
+  70% {
+    transform: translateY(-5px);
+  }
+  90% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
+  20%, 40%, 60%, 80% { transform: translateX(2px); }
+}
+
+@keyframes glow {
+  0%, 100% { 
+    box-shadow: 0 0 5px rgba(139, 92, 246, 0.5);
+  }
+  50% { 
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.8), 0 0 30px rgba(139, 92, 246, 0.4);
+  }
+}
+
+/* Utility classes */
+.animate-fadeIn { animation: fadeIn 0.6s ease-out; }
+.animate-slideInLeft { animation: slideInLeft 0.6s ease-out; }
+.animate-slideInRight { animation: slideInRight 0.6s ease-out; }
+.animate-scaleIn { animation: scaleIn 0.4s ease-out; }
+.animate-pulse-custom { animation: pulse 2s ease-in-out infinite; }
+.animate-bounce-custom { animation: bounce 1s ease-in-out infinite; }
+.animate-shake { animation: shake 0.5s ease-in-out; }
+.animate-glow { animation: glow 2s ease-in-out infinite; }
+
+/* Modern buton stilleri */
+.btn-primary {
+  @apply bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800;
+  @apply text-white font-semibold py-3 px-6 rounded-xl;
+  @apply transform transition-all duration-300 ease-in-out;
+  @apply hover:scale-105 hover:shadow-lg hover:shadow-purple-500/25;
+  @apply active:scale-95;
+  @apply border border-purple-500/20;
+}
+
+.btn-secondary {
+  @apply bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800;
+  @apply text-white font-semibold py-3 px-6 rounded-xl;
+  @apply transform transition-all duration-300 ease-in-out;
+  @apply hover:scale-105 hover:shadow-lg hover:shadow-blue-500/25;
+  @apply active:scale-95;
+  @apply border border-blue-500/20;
+}
+
+.btn-danger {
+  @apply bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800;
+  @apply text-white font-semibold py-3 px-6 rounded-xl;
+  @apply transform transition-all duration-300 ease-in-out;
+  @apply hover:scale-105 hover:shadow-lg hover:shadow-red-500/25;
+  @apply active:scale-95;
+  @apply border border-red-500/20;
+}
+
+.btn-success {
+  @apply bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800;
+  @apply text-white font-semibold py-3 px-6 rounded-xl;
+  @apply transform transition-all duration-300 ease-in-out;
+  @apply hover:scale-105 hover:shadow-lg hover:shadow-green-500/25;
+  @apply active:scale-95;
+  @apply border border-green-500/20;
+}
+
+.btn-warning {
+  @apply bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800;
+  @apply text-white font-semibold py-3 px-6 rounded-xl;
+  @apply transform transition-all duration-300 ease-in-out;
+  @apply hover:scale-105 hover:shadow-lg hover:shadow-orange-500/25;
+  @apply active:scale-95;
+  @apply border border-orange-500/20;
+}
+
+.btn-ghost {
+  @apply bg-transparent border-2 border-purple-500/30 text-purple-300;
+  @apply hover:bg-purple-500/10 hover:border-purple-400 hover:text-purple-200;
+  @apply font-semibold py-3 px-6 rounded-xl;
+  @apply transform transition-all duration-300 ease-in-out;
+  @apply hover:scale-105;
+  @apply active:scale-95;
+}
+
+/* Modern kart stilleri */
+.card {
+  @apply bg-slate-800/80 backdrop-blur-sm border border-slate-700/50;
+  @apply rounded-2xl p-6 shadow-xl;
+  @apply transform transition-all duration-300 ease-in-out;
+  @apply hover:shadow-2xl hover:shadow-purple-500/10;
+  @apply hover:-translate-y-1;
+}
+
+.card-hover {
+  @apply hover:bg-slate-700/80 hover:border-slate-600/50;
+  @apply cursor-pointer;
+}
+
+.card-glow {
+  @apply shadow-lg shadow-purple-500/20;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+/* Input stilleri */
+.input-modern {
+  @apply bg-slate-800/50 border border-slate-600/50 text-white placeholder-slate-400;
+  @apply rounded-xl px-4 py-3 text-lg;
+  @apply focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent;
+  @apply transition-all duration-300 ease-in-out;
+  @apply hover:border-slate-500/70;
+}
+
+/* Oyuncu kartları */
+.player-card {
+  @apply bg-gradient-to-br from-slate-800/90 to-slate-900/90;
+  @apply border border-slate-700/50 rounded-xl p-4;
+  @apply transform transition-all duration-300 ease-in-out;
+  @apply hover:scale-105 hover:shadow-lg hover:shadow-purple-500/20;
+  @apply cursor-pointer;
+}
+
+.player-card.alive {
+  @apply border-green-500/30 shadow-green-500/10;
+}
+
+.player-card.dead {
+  @apply border-red-500/30 shadow-red-500/10 opacity-60;
+  @apply bg-gradient-to-br from-red-900/20 to-slate-900/90;
+}
+
+.player-card.host {
+  @apply border-yellow-500/40 shadow-yellow-500/20;
+  @apply bg-gradient-to-br from-yellow-800/20 to-slate-800/90;
+}
+
+/* Rol kartları */
+.role-card {
+  @apply bg-gradient-to-br from-purple-900/50 to-slate-900/80;
+  @apply border border-purple-500/30 rounded-2xl p-6;
+  @apply shadow-xl shadow-purple-500/20;
+  @apply transform transition-all duration-500 ease-in-out;
+}
+
+/* İpucu stilleri */
+.clue-location {
+  @apply bg-blue-500/10 border border-blue-500/30 text-blue-300;
+  @apply rounded-lg p-3 mb-2;
+}
+
+.clue-visual {
+  @apply bg-purple-500/10 border border-purple-500/30 text-purple-300;
+  @apply rounded-lg p-3 mb-2;
+}
+
+.clue-fake {
+  @apply bg-red-500/10 border border-red-500/30 text-red-300;
+  @apply rounded-lg p-3 mb-2;
+}
+
+/* Modal stilleri */
+.modal-overlay {
+  @apply fixed inset-0 bg-black/70 backdrop-blur-sm z-50;
+  @apply flex items-center justify-center p-4;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.modal-content {
+  @apply bg-slate-800 border border-slate-700 rounded-2xl;
+  @apply max-w-2xl w-full max-h-[90vh] overflow-y-auto;
+  @apply shadow-2xl;
+  animation: scaleIn 0.3s ease-out;
+}
+
+/* Scrollbar stilleri */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(30, 41, 59, 0.5);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.5);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.7);
+}
+
+/* Geri butonu özel stili */
+.back-button {
+  @apply fixed top-6 left-6 z-50;
+  @apply bg-slate-800/80 hover:bg-slate-700/80 backdrop-blur-sm;
+  @apply border border-slate-600/50 hover:border-purple-500/50;
+  @apply text-white px-4 py-2 rounded-xl font-semibold;
+  @apply transition-all duration-300 ease-in-out;
+  @apply hover:scale-105 hover:shadow-lg hover:shadow-purple-500/20;
+  @apply animate-slideInLeft;
+}
+
+/* Özel efektler */
+.text-glow {
+  text-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
+}
+
+.border-glow {
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.3);
+  border: 1px solid rgba(139, 92, 246, 0.5);
+}
+
+/* Rol kartları için özel animasyon */
+@keyframes roleCardAppear {
+  0% { 
+    opacity: 0; 
+    transform: translateY(20px) scale(0.9); 
+  }
+  100% { 
+    opacity: 1; 
+    transform: translateY(0) scale(1); 
+  }
+}
+
+.role-card-appear {
+  animation: roleCardAppear 0.6s ease-out forwards;
+}
+
+/* Responsive tasarım */
+@media (max-width: 768px) {
+  .card {
+    @apply p-4 rounded-xl;
+  }
+  
+  .btn-primary, .btn-secondary, .btn-danger, .btn-success, .btn-warning, .btn-ghost {
+    @apply py-2 px-4 text-sm;
+  }
+  
+  .player-card {
+    @apply p-3;
+  }
+  
+  .back-button {
+    @apply top-4 left-4 px-3 py-2 text-sm;
+  }
+  
+  .modal-content {
+    @apply p-4;
+  }
 }
