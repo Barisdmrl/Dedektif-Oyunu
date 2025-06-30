@@ -83,7 +83,7 @@
   50% { 
     box-shadow: 0 0 25px rgba(139, 92, 246, 0.6);
     border-color: rgba(139, 92, 246, 0.6);
-  }
+}
 }
 
 /* Oyuncu grid'i */
@@ -290,7 +290,7 @@
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto;
-}
+  }
 
 @keyframes spin {
   0% { transform: rotate(0deg); }
@@ -334,8 +334,8 @@
   
   .game-logo {
     font-size: 2.5rem;
-  }
-  
+}
+
   .main-title {
     font-size: 1.8rem;
   }
