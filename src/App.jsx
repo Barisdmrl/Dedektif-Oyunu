@@ -463,10 +463,10 @@ function App() {
         const nightActions = gameData.nightActions || {}
         const currentTurn = gameData.turn || 1
         
-        // Bu turda aksiyon alması gereken roller (sadece oyunda olanlar)
+        // Bu turda aksiyon alması gereken roller (sadece yaşayan ve oyunda olan roller)
         const activeNightRoles = alivePlayers.filter(p => {
           const nightRoles = ['KILLER', 'VAMPIRE', 'MANIPULATOR', 'SABOTEUR', 'SHADOW_GUARDIAN', 'CHAOS_AGENT']
-          return nightRoles.includes(p.role) && isRoleInGame(p.role)
+          return nightRoles.includes(p.role) // isRoleInGame check'i gereksiz, çünkü p.role zaten oyunda olan rol
         })
         
         // Tüm aktif roller aksiyon aldı mı kontrol et
@@ -768,10 +768,10 @@ ${gameData.currentNightEvent.description}`)
         innocentCount = 0
         shadowCount = 2
       } else if (playerCount >= 7 && playerCount <= 8) {
-        killerCount = 1
+        killerCount = 2  // 8 kişide 2 kötü takım üyesi
         securityCount = 1
         innocentCount = 0
-        shadowCount = playerCount - 4
+        shadowCount = playerCount - 5  // Katil + Casus + Dedektif + Güvenlik = 5
       } else if (playerCount >= 9 && playerCount <= 10) {
         killerCount = 2
         securityCount = 1
@@ -3080,14 +3080,14 @@ ${gameData.currentNightEvent.description}`)
             {gamePhase === GAME_PHASES.SECURITY && '🛡️ Güvenlik Fazı'}
             {gamePhase === GAME_PHASES.FORENSIC && '🔬 Adli Tıp Fazı'}
             {gamePhase === GAME_PHASES.PSYCHOLOGIST && '🧠 Psikolog Fazı'}
-            {gamePhase === GAME_PHASES.VAMPIRE && '🧛 Kan Emici Fazı'}
-            {gamePhase === GAME_PHASES.MANIPULATOR && '🧠 Manipülatör Fazı'}
-            {gamePhase === GAME_PHASES.SHADOW_GUARDIAN && '🛡️ Gölge Koruyucu Fazı'}
-            {gamePhase === GAME_PHASES.SABOTEUR && '🔒 Sabotajcı Fazı'}
-            {gamePhase === GAME_PHASES.ANALYST && '🎓 Strateji Uzmanı Fazı'}
-            {gamePhase === GAME_PHASES.INTUITIVE && '🔮 Sezici Fazı'}
-            {gamePhase === GAME_PHASES.DOUBLE_AGENT && '🐍 İkili Ajan Fazı'}
-            {gamePhase === GAME_PHASES.CHAOS_AGENT && '🃏 Kaos Ustası Fazı'}
+            {gamePhase === GAME_PHASES.VAMPIRE && isRoleInGame('VAMPIRE') && '🧛 Kan Emici Fazı'}
+            {gamePhase === GAME_PHASES.MANIPULATOR && isRoleInGame('MANIPULATOR') && '🧠 Manipülatör Fazı'}
+            {gamePhase === GAME_PHASES.SHADOW_GUARDIAN && isRoleInGame('SHADOW_GUARDIAN') && '🛡️ Gölge Koruyucu Fazı'}
+            {gamePhase === GAME_PHASES.SABOTEUR && isRoleInGame('SABOTEUR') && '🔒 Sabotajcı Fazı'}
+            {gamePhase === GAME_PHASES.ANALYST && isRoleInGame('ANALYST') && '🎓 Strateji Uzmanı Fazı'}
+            {gamePhase === GAME_PHASES.INTUITIVE && isRoleInGame('INTUITIVE') && '🔮 Sezici Fazı'}
+            {gamePhase === GAME_PHASES.DOUBLE_AGENT && isRoleInGame('DOUBLE_AGENT') && '🐍 İkili Ajan Fazı'}
+            {gamePhase === GAME_PHASES.CHAOS_AGENT && isRoleInGame('CHAOS_AGENT') && '🃏 Kaos Ustası Fazı'}
             {gamePhase === GAME_PHASES.NIGHT && '🌙 Gece Fazı'}
             {gamePhase === GAME_PHASES.DAY && '☀️ Gündüz Fazı'}
             {gamePhase === GAME_PHASES.DISCUSSION && '💬 Tartışma Fazı'}
@@ -3465,7 +3465,7 @@ ${gameData.currentNightEvent.description}`)
           )}
 
           {/* Kan Emici Fazı */}
-          {gamePhase === GAME_PHASES.VAMPIRE && (
+          {gamePhase === GAME_PHASES.VAMPIRE && isRoleInGame('VAMPIRE') && (
             <div className="max-w-2xl mx-auto">
               <div className="bg-gray-800 rounded-lg p-6">
                 <h2 className="text-2xl font-bold mb-4">🧛 KAN EMİCİ - Tur {gameData.turn}</h2>
@@ -3525,7 +3525,7 @@ ${gameData.currentNightEvent.description}`)
           )}
 
           {/* Manipülatör Fazı */}
-          {gamePhase === GAME_PHASES.MANIPULATOR && (
+          {gamePhase === GAME_PHASES.MANIPULATOR && isRoleInGame('MANIPULATOR') && (
             <div className="max-w-2xl mx-auto">
               <div className="bg-gray-800 rounded-lg p-6">
                 <h2 className="text-2xl font-bold mb-4">🧠 MANİPÜLATÖR - Tur {gameData.turn}</h2>
@@ -3605,7 +3605,7 @@ ${gameData.currentNightEvent.description}`)
           )}
 
           {/* Gölge Koruyucu Fazı */}
-          {gamePhase === GAME_PHASES.SHADOW_GUARDIAN && (
+          {gamePhase === GAME_PHASES.SHADOW_GUARDIAN && isRoleInGame('SHADOW_GUARDIAN') && (
             <div className="max-w-2xl mx-auto">
               <div className="bg-gray-800 rounded-lg p-6">
                 <h2 className="text-2xl font-bold mb-4">🛡️ GÖLGE KORUYUCU - Tur {gameData.turn}</h2>
@@ -3648,7 +3648,7 @@ ${gameData.currentNightEvent.description}`)
           )}
 
           {/* Sabotajcı Fazı */}
-          {gamePhase === GAME_PHASES.SABOTEUR && (
+          {gamePhase === GAME_PHASES.SABOTEUR && isRoleInGame('SABOTEUR') && (
             <div className="max-w-2xl mx-auto">
               <div className="bg-gray-800 rounded-lg p-6">
                 <h2 className="text-2xl font-bold mb-4">🔒 SABOTAJCI - Tur {gameData.turn}</h2>
@@ -4276,7 +4276,7 @@ ${gameData.currentNightEvent.description}`)
           )}
 
           {/* Kaos Ustası Fazı */}
-          {gamePhase === GAME_PHASES.CHAOS_AGENT && (
+          {gamePhase === GAME_PHASES.CHAOS_AGENT && isRoleInGame('CHAOS_AGENT') && (
             <div className="max-w-2xl mx-auto">
               <div className="card animate-scaleIn">
                 <h2 className="text-3xl font-bold mb-6 text-center text-glow">🃏 KAOS USTASI FAZI</h2>
