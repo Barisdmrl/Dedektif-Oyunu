@@ -306,10 +306,12 @@ function App() {
 
   // Firebase bağlantısı test et
   useEffect(() => {
+    let unsubscribe = null
+    
     const testConnection = async () => {
       try {
         const testRef = ref(database, '.info/connected')
-        onValue(testRef, (snapshot) => {
+        unsubscribe = onValue(testRef, (snapshot) => {
           const isConnected = snapshot.val() === true
           setFirebaseConnected(isConnected)
           if (isConnected) {
@@ -325,6 +327,12 @@ function App() {
     }
     
     testConnection()
+    
+    return () => {
+      if (unsubscribe) {
+        unsubscribe()
+      }
+    }
   }, [])
 
   // Oyun fazı değişikliklerini takip et
@@ -335,14 +343,14 @@ function App() {
     }
   }, [gamePhase])
 
-  // Firebase bağlantı durumunu sürekli kontrol et
+  // Firebase bağlantı durumunu kontrol et (sadece debug için)
   useEffect(() => {
     console.log('🔗 Firebase bağlantı durumu:', firebaseConnected)
     console.log('🎮 Oyun durumu:', { gameRoomId, playerId, isHost, gamePhase })
     if (gameData) {
-      console.log('📊 Oyun verisi:', gameData)
+      console.log('📊 Oyun verisi mevcut')
     }
-  }, [firebaseConnected, gameRoomId, playerId, isHost, gamePhase, gameData])
+  }, [firebaseConnected, gameRoomId, playerId, isHost, gamePhase])
 
   // Oylama süre takibi
   useEffect(() => {
@@ -389,43 +397,45 @@ function App() {
 
   // Firebase bağlantısını dinle
   useEffect(() => {
-    if (gameRoomId) {
-      console.log('🔗 Firebase dinleme başlatılıyor...', gameRoomId)
-      const gameRef = ref(database, `games/${gameRoomId}`)
-      
-      const unsubscribe = onValue(gameRef, (snapshot) => {
-        console.log('📡 Firebase snapshot alındı:', snapshot.exists())
-        const data = snapshot.val()
-        console.log('📊 Firebase data:', data)
-        
-        if (data) {
-          console.log('✅ gameData güncelleniyor:', data)
-          setGameData(data)
-          setPlayers(Object.values(data.players || {}))
-          setGamePhase(data.gamePhase || GAME_PHASES.LOBBY)
-          setCurrentPlayerIndex(data.currentPlayerIndex || 0)
-          setConnectionStatus('connected')
-          
-          // Kendi rolümü bul
-          if (data.players && playerId && data.players[playerId]) {
-            console.log('🎭 Rolüm bulundu:', data.players[playerId].role)
-            setMyRole(data.players[playerId].role)
-          }
-        } else {
-          console.log('❌ Firebase data yok!')
-          setConnectionStatus('game_not_found')
-        }
-      }, (error) => {
-        console.error('❌ Firebase dinleme hatası:', error)
-        setConnectionStatus('error')
-      })
-
-      return () => {
-        console.log('🔌 Firebase dinleme kapatılıyor...')
-        off(gameRef, 'value', unsubscribe)
-      }
-    } else {
+    if (!gameRoomId) {
       console.log('⚠️ gameRoomId yok, Firebase dinleme başlatılmıyor')
+      return
+    }
+
+    console.log('🔗 Firebase dinleme başlatılıyor...', gameRoomId)
+    const gameRef = ref(database, `games/${gameRoomId}`)
+    
+    const unsubscribe = onValue(gameRef, (snapshot) => {
+      console.log('📡 Firebase snapshot alındı:', snapshot.exists())
+      const data = snapshot.val()
+      console.log('📊 Firebase data mevcut:', !!data)
+      
+      if (data) {
+        console.log('✅ gameData güncelleniyor')
+        setGameData(data)
+        setPlayers(Object.values(data.players || {}))
+        setGamePhase(data.gamePhase || GAME_PHASES.LOBBY)
+        setCurrentPlayerIndex(data.currentPlayerIndex || 0)
+        setConnectionStatus('connected')
+        
+        // Kendi rolümü bul
+        if (data.players && playerId && data.players[playerId]) {
+          console.log('🎭 Rolüm bulundu:', data.players[playerId].role)
+          setMyRole(data.players[playerId].role)
+        }
+      } else {
+        console.log('❌ Firebase data yok!')
+        setGameData(null)
+        setConnectionStatus('game_not_found')
+      }
+    }, (error) => {
+      console.error('❌ Firebase dinleme hatası:', error)
+      setConnectionStatus('error')
+    })
+
+    return () => {
+      console.log('🔌 Firebase dinleme kapatılıyor...')
+      unsubscribe()
     }
   }, [gameRoomId, playerId])
 
@@ -443,6 +453,31 @@ function App() {
       }
     }
   }, [gamePhase, isHost, gameData])
+
+  // Oyun kazanma durumlarını kontrol et
+  useEffect(() => {
+    if (gameData && isHost && gamePhase !== GAME_PHASES.LOBBY && gamePhase !== GAME_PHASES.ROLE_REVEAL) {
+      const alivePlayers = Object.values(gameData.players).filter(p => p.isAlive)
+      const aliveKillers = alivePlayers.filter(p => p.role === 'KILLER')
+      const aliveGoodTeam = alivePlayers.filter(p => 
+        ['DETECTIVE', 'SPY', 'SECURITY', 'INNOCENT', 'FORENSIC', 'PSYCHOLOGIST', 'TWINS', 'REFLECTOR', 'SHADOW_GUARDIAN', 'ANALYST', 'INTUITIVE'].includes(p.role)
+      )
+      const aliveEvilTeam = alivePlayers.filter(p => 
+        ['KILLER', 'VAMPIRE', 'MANIPULATOR', 'DECOY_KILLER', 'SABOTEUR', 'FAKE_DETECTIVE'].includes(p.role)
+      )
+      
+      // Katiller kazandı (iyi takım ≤ kötü takım)
+      if (aliveKillers.length > 0 && aliveGoodTeam.length <= aliveEvilTeam.length) {
+        console.log('💀 Katiller kazandı!')
+        changeGamePhase(GAME_PHASES.GAME_OVER)
+      }
+      // İyi takım kazandı (hiç katil kalmadı)
+      else if (aliveKillers.length === 0 && aliveGoodTeam.length > 0) {
+        console.log('👮 İyi takım kazandı!')
+        changeGamePhase(GAME_PHASES.GAME_OVER)
+      }
+    }
+  }, [gameData, isHost, gamePhase])
 
   // Oyun odası oluştur
   // Oda kodu oluşturucu fonksiyonu (5-6 haneli, harf ve sayı karışımı)
@@ -2720,31 +2755,6 @@ function App() {
     ? Object.values(gameData.detectiveClues[playerId]) 
     : []
   const currentTurnDeadPlayers = deadPlayers.filter(p => p.turnDied === gameData.turn)
-
-  // Oyun kazanma durumlarını kontrol et
-  useEffect(() => {
-    if (gameData && isHost && gamePhase !== GAME_PHASES.LOBBY && gamePhase !== GAME_PHASES.ROLE_REVEAL) {
-      const alivePlayers = Object.values(gameData.players).filter(p => p.isAlive)
-      const aliveKillers = alivePlayers.filter(p => p.role === 'KILLER')
-      const aliveGoodTeam = alivePlayers.filter(p => 
-        ['DETECTIVE', 'SPY', 'SECURITY', 'INNOCENT', 'FORENSIC', 'PSYCHOLOGIST', 'TWINS', 'REFLECTOR', 'SHADOW_GUARDIAN', 'ANALYST', 'INTUITIVE'].includes(p.role)
-      )
-      const aliveEvilTeam = alivePlayers.filter(p => 
-        ['KILLER', 'VAMPIRE', 'MANIPULATOR', 'DECOY_KILLER', 'SABOTEUR', 'FAKE_DETECTIVE'].includes(p.role)
-      )
-      
-      // Katiller kazandı (iyi takım ≤ kötü takım)
-      if (aliveKillers.length > 0 && aliveGoodTeam.length <= aliveEvilTeam.length) {
-        console.log('💀 Katiller kazandı!')
-        changeGamePhase(GAME_PHASES.GAME_OVER)
-      }
-      // İyi takım kazandı (hiç katil kalmadı)
-      else if (aliveKillers.length === 0 && aliveGoodTeam.length > 0) {
-        console.log('👮 İyi takım kazandı!')
-        changeGamePhase(GAME_PHASES.GAME_OVER)
-      }
-    }
-  }, [gameData, isHost, gamePhase])
 
   return (
     <div className="min-h-screen text-white relative">
