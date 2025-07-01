@@ -524,6 +524,45 @@ function App() {
     }
   }, [gameData, isHost, gamePhase])
 
+  // Gizemli Adam rol bildirimi (her tur başlangıcında)
+  useEffect(() => {
+    if (gameData && myRole === 'MYSTERIOUS' && gamePhase === GAME_PHASES.DAY && gameData.turn) {
+      const currentTurn = gameData.turn
+      const lastNotifiedTurn = localStorage.getItem(`mysterious_notified_turn_${gameRoomId}`)
+      
+      if (lastNotifiedTurn !== currentTurn.toString()) {
+        const mysteriousPlayer = gameData.players[playerId]
+        if (mysteriousPlayer && mysteriousPlayer.isAlive && mysteriousPlayer.currentRole) {
+          setTimeout(() => {
+            alert(`🎭 Gizemli Adam - Tur ${currentTurn}\n\nBu tur rolünüz: ${ROLES[mysteriousPlayer.currentRole]?.name}\n\nAçıklama: ${ROLES[mysteriousPlayer.currentRole]?.description}`)
+            localStorage.setItem(`mysterious_notified_turn_${gameRoomId}`, currentTurn.toString())
+          }, 1000)
+        }
+      }
+    }
+  }, [gameData, myRole, gamePhase, gameRoomId, playerId])
+
+  // Gece olayı bildirimi (gece fazına geçildiğinde)
+  useEffect(() => {
+    if (gameData && gamePhase === GAME_PHASES.NIGHT && gameData.currentNightEvent) {
+      const eventId = gameData.currentNightEvent.id
+      const turn = gameData.turn || 1
+      const lastNotifiedEvent = localStorage.getItem(`night_event_notified_${gameRoomId}_${turn}`)
+      
+      if (lastNotifiedEvent !== eventId) {
+        setTimeout(() => {
+          const event = gameData.currentNightEvent
+          if (event.id === 'normal_night') {
+            alert(`🌙 Normal Gece - Tur ${turn}\n\nBu gece özel bir olay yok. Herkes normal görevlerini yapabilir.`)
+          } else {
+            alert(`${event.name.split(' ')[0]} ${event.name} - Tur ${turn}\n\n${event.description}\n\nBu özel gece etkisini göz önünde bulundurarak hareket edin!`)
+          }
+          localStorage.setItem(`night_event_notified_${gameRoomId}_${turn}`, eventId)
+        }, 1500)
+      }
+    }
+  }, [gameData, gamePhase, gameRoomId])
+
   // Oyun odası oluştur
   // Oda kodu oluşturucu fonksiyonu (5-6 haneli, harf ve sayı karışımı)
   const generateRoomCode = () => {
@@ -671,9 +710,9 @@ function App() {
     
     console.log('👥 Oyuncu bilgileri:', { playerCount, playerList })
     
-    if (playerCount < 4) {
+    if (playerCount < 6) {
       console.log('❌ Yetersiz oyuncu:', playerCount)
-      alert('En az 4 oyuncu gerekli!')
+      alert('En az 6 oyuncu gerekli!')
       return
     }
     
@@ -690,15 +729,11 @@ function App() {
       let killerCount, spyCount = 1, detectiveCount = 1, securityCount = 0, innocentCount, shadowCount
       
       // Oyuncu sayısına göre temel rol dağılımı
-      if (playerCount === 4) {
-        killerCount = 1
-        innocentCount = 1
-        shadowCount = 1
-      } else if (playerCount >= 5 && playerCount <= 6) {
+      if (playerCount === 6) {
         killerCount = 1
         securityCount = 1
         innocentCount = 0
-        shadowCount = playerCount - 4
+        shadowCount = 2
       } else if (playerCount >= 7 && playerCount <= 8) {
         killerCount = 1
         securityCount = 1
@@ -1487,10 +1522,19 @@ function App() {
 
   // Gece olayı belirle
   const determineNightEvent = () => {
-    // %30 ihtimalle bir olay olur
-    if (Math.random() > 0.3) return null
+    // %30 ihtimalle özel bir olay olur
+    if (Math.random() > 0.3) {
+      // Normal gece
+      return {
+        id: 'normal_night',
+        name: '🌙 Normal Gece',
+        description: 'Sakin bir gece. Herkes normal görevlerini yapabilir.',
+        effect: 'none',
+        probability: 0.7
+      }
+    }
     
-    // Olasılıklara göre olay seç
+    // Olasılıklara göre özel olay seç
     const random = Math.random()
     let cumulativeProbability = 0
     
@@ -1501,7 +1545,14 @@ function App() {
       }
     }
     
-    return null
+    // Eğer hiçbiri seçilmezse normal gece
+    return {
+      id: 'normal_night',
+      name: '🌙 Normal Gece',
+      description: 'Sakin bir gece. Herkes normal görevlerini yapabilir.',
+      effect: 'none',
+      probability: 0.7
+    }
   }
 
   // Gece olayı etkilerini uygula
@@ -1627,9 +1678,7 @@ function App() {
           
                     // Gece olayını belirle ve uygula
           const nightEvent = determineNightEvent()
-          if (nightEvent) {
-            await applyNightEventEffects(nightEvent)
-        }
+          await applyNightEventEffects(nightEvent)
         
         await update(gameRef, updates)
       }
@@ -1669,9 +1718,7 @@ function App() {
       
       // Gece olayını belirle ve uygula
       const nightEvent = determineNightEvent()
-      if (nightEvent) {
-        await applyNightEventEffects(nightEvent)
-      }
+      await applyNightEventEffects(nightEvent)
       
       await update(gameRef, updates)
     }
@@ -3066,14 +3113,14 @@ function App() {
                     onClick={() => {
                       console.log('🔥 Oyun başlat butonuna tıklandı!')
                       console.log('Buton durumu:', { isHost, playersLength: players.length, gameRoomId, playerId })
-                      console.log('Buton disabled mi?', players.length < 4)
+                      console.log('Buton disabled mi?', players.length < 6)
                       console.log('gameData var mı?', !!gameData)
                       startGame()
                     }}
-                    disabled={players.length < 4}
-                      className={`w-full text-xl ${players.length < 4 ? 'btn-ghost cursor-not-allowed opacity-50' : 'btn-success animate-pulse-custom'}`}
+                    disabled={players.length < 6}
+                      className={`w-full text-xl ${players.length < 6 ? 'btn-ghost cursor-not-allowed opacity-50' : 'btn-success animate-pulse-custom'}`}
                   >
-                    {players.length < 4 ? `Oyunu Başlat (${players.length}/4)` : '🎮 Oyunu Başlat'}
+                    {players.length < 6 ? `Oyunu Başlat (${players.length}/6)` : '🎮 Oyunu Başlat'}
                   </button>
                   ) : (
                     <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-600/50 animate-pulse-custom">
@@ -4176,6 +4223,68 @@ function App() {
                         <>⚡ Host oyları sayıyor...</>
                       )}
                     </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Kaos Ustası Fazı */}
+          {gamePhase === GAME_PHASES.CHAOS_AGENT && (
+            <div className="max-w-2xl mx-auto">
+              <div className="card animate-scaleIn">
+                <h2 className="text-3xl font-bold mb-6 text-center text-glow">🃏 KAOS USTASI FAZI</h2>
+                
+                {myRole === 'CHAOS_AGENT' ? (
+                  <div>
+                    <div className="bg-purple-900/50 p-4 rounded-lg mb-6 border border-purple-500/30">
+                      <h3 className="font-bold text-purple-300 mb-2">🃏 Kaos Gücünüz:</h3>
+                      <p className="text-sm text-gray-300">
+                        Bir oyuncunun rolünü rastgele değiştirebilirsiniz! Bu güç sadece bir kez kullanılabilir.
+                      </p>
+                      {gameData.players[playerId].chaosUsed && (
+                        <p className="text-yellow-300 text-sm mt-2">⚠️ Bu oyunda kaos gücünüzü zaten kullandınız!</p>
+                      )}
+                    </div>
+
+                    {!gameData.players[playerId].chaosUsed ? (
+                      <>
+                        <p className="mb-4 text-gray-300 text-center">Hangi oyuncunun rolünü değiştirmek istiyorsunuz?</p>
+                        
+                        <div className="space-y-3 mb-6">
+                          {alivePlayers.filter(p => p.id !== playerId).map(player => (
+                            <button
+                              key={player.id}
+                              onClick={() => useChaosPower(player.id)}
+                              className="w-full p-4 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 rounded-xl transition-all duration-300 transform hover:scale-105 border border-purple-500/30"
+                            >
+                              <div className="flex justify-between items-center">
+                                <span className="font-bold text-lg">🃏 {player.name}</span>
+                                <span className="text-purple-300">Rolünü Değiştir</span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="bg-gray-700/50 p-4 rounded-lg text-center">
+                          <p className="text-sm text-gray-300">
+                            💡 İpucu: Güçlü rolleri hedefleyerek oyun dengesini değiştirebilirsiniz!
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center">
+                        <p className="text-gray-300 mb-4">Bu oyunda kaos gücünüzü zaten kullandınız.</p>
+                        <p className="text-sm text-gray-400">Diğer oyuncuların fazlarını tamamlamasını bekliyorsunuz...</p>
+                        <div className="animate-pulse text-6xl mt-4">🃏</div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center">
+                    <p className="text-gray-300 mb-4">Kaos Ustası gücünü kullanıyor...</p>
+                    <p className="text-sm text-gray-400">Dikkatli olun, birinin rolü değişebilir!</p>
+                    <div className="animate-spin text-6xl mt-4">🃏</div>
                   </div>
                 )}
               </div>
