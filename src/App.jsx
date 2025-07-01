@@ -357,7 +357,7 @@ function App() {
     if (gameData && gameData.votingStartTime && gamePhase === GAME_PHASES.VOTING) {
       const timer = setInterval(() => {
         const elapsed = Math.floor((Date.now() - gameData.votingStartTime) / 1000)
-        const timeLeft = Math.max(0, 60 - elapsed)
+        const timeLeft = Math.max(0, 90 - elapsed) // 90 saniye oylama süresi
         
         setVotingTimeLeft(timeLeft)
         
@@ -450,6 +450,51 @@ function App() {
         setTimeout(() => {
           changeGamePhase(GAME_PHASES.DAY)
         }, 2000) // 2 saniye bekle ki oyuncular durumu görebilsin
+        return
+      }
+
+      // Gece fazında aktif roller için bekleme sistemi
+      const checkNightPhaseCompletion = () => {
+        const alivePlayers = Object.values(gameData.players).filter(p => p.isAlive)
+        const nightActions = gameData.nightActions || {}
+        const currentTurn = gameData.turn || 1
+        
+        // Bu turda aksiyon alması gereken roller
+        const activeNightRoles = alivePlayers.filter(p => {
+          const nightRoles = ['KILLER', 'VAMPIRE', 'MANIPULATOR', 'SABOTEUR', 'SHADOW_GUARDIAN', 'CHAOS_AGENT']
+          return nightRoles.includes(p.role)
+        })
+        
+        // Tüm aktif roller aksiyon aldı mı kontrol et
+        const allActionsCompleted = activeNightRoles.every(player => {
+          const actionKey = `${player.id}_turn_${currentTurn}`
+          return nightActions[actionKey] || false
+        })
+        
+        console.log('🌙 Gece fazı kontrol:', {
+          activeRoles: activeNightRoles.length,
+          completedActions: Object.keys(nightActions).filter(key => key.includes(`_turn_${currentTurn}`)).length,
+          allCompleted: allActionsCompleted
+        })
+        
+        // Eğer tüm roller görevini yaptıysa gündüze geç
+        if (allActionsCompleted && activeNightRoles.length > 0) {
+          console.log('🌅 Tüm gece görevleri tamamlandı, gündüze geçiliyor...')
+          setTimeout(() => {
+            changeGamePhase(GAME_PHASES.DAY)
+          }, 3000) // 3 saniye bekle ki oyuncular sonuçları görebilsin
+        }
+      }
+      
+      // 5 saniye sonra kontrol et (oyuncuların hazırlanması için)
+      const checkTimer = setTimeout(checkNightPhaseCompletion, 5000)
+      
+      // Her 10 saniyede bir kontrol et
+      const intervalTimer = setInterval(checkNightPhaseCompletion, 10000)
+      
+      return () => {
+        clearTimeout(checkTimer)
+        clearInterval(intervalTimer)
       }
     }
   }, [gamePhase, isHost, gameData])
@@ -1109,7 +1154,20 @@ function App() {
     if (myRole !== 'VAMPIRE' || !gameRoomId) return
 
     const gameRef = ref(database, `games/${gameRoomId}`)
+    const currentTurn = gameData.turn || 1
     const targetPlayer = gameData.players[targetId]
+    
+    // Gece aksiyonunu kaydet
+    const nightActionKey = `${playerId}_turn_${currentTurn}`
+    const nightActionRef = ref(database, `games/${gameRoomId}/nightActions/${nightActionKey}`)
+    await set(nightActionRef, {
+      playerId,
+      role: 'VAMPIRE',
+      action: 'hypnotize',
+      targetId,
+      turn: currentTurn,
+      timestamp: Date.now()
+    })
     
     // Hipnotize edilmiş oyuncuları kaydet
     const currentHypnotized = gameData.hypnotizedPlayers || []
@@ -1143,8 +1201,22 @@ function App() {
     if (myRole !== 'MANIPULATOR' || !gameRoomId) return
 
     const gameRef = ref(database, `games/${gameRoomId}`)
+    const currentTurn = gameData.turn || 1
     const targetPlayer = gameData.players[targetId]
     const redirectPlayer = gameData.players[redirectToId]
+    
+    // Gece aksiyonunu kaydet
+    const nightActionKey = `${playerId}_turn_${currentTurn}`
+    const nightActionRef = ref(database, `games/${gameRoomId}/nightActions/${nightActionKey}`)
+    await set(nightActionRef, {
+      playerId,
+      role: 'MANIPULATOR',
+      action: 'manipulate',
+      targetId,
+      redirectToId,
+      turn: currentTurn,
+      timestamp: Date.now()
+    })
     
     // Manipülasyon gecesi etkisi - iki kişi manipüle edebilir
     const isManipulationNight = gameData.currentNightEvent?.id === 'manipulation_night'
@@ -1177,7 +1249,20 @@ function App() {
     if (myRole !== 'SHADOW_GUARDIAN' || !gameRoomId) return
 
     const gameRef = ref(database, `games/${gameRoomId}`)
+    const currentTurn = gameData.turn || 1
     const targetPlayer = gameData.players[targetId]
+    
+    // Gece aksiyonunu kaydet
+    const nightActionKey = `${playerId}_turn_${currentTurn}`
+    const nightActionRef = ref(database, `games/${gameRoomId}/nightActions/${nightActionKey}`)
+    await set(nightActionRef, {
+      playerId,
+      role: 'SHADOW_GUARDIAN',
+      action: 'protect',
+      targetId,
+      turn: currentTurn,
+      timestamp: Date.now()
+    })
     
     // Gölge gecesi etkisi - iki kişi koruyabilir
     const isShadowNight = gameData.currentNightEvent?.id === 'shadow_night'
@@ -1212,7 +1297,20 @@ function App() {
     }
 
     const gameRef = ref(database, `games/${gameRoomId}`)
+    const currentTurn = gameData.turn || 1
     const targetPlayer = gameData.players[targetId]
+    
+    // Gece aksiyonunu kaydet
+    const nightActionKey = `${playerId}_turn_${currentTurn}`
+    const nightActionRef = ref(database, `games/${gameRoomId}/nightActions/${nightActionKey}`)
+    await set(nightActionRef, {
+      playerId,
+      role: 'SABOTEUR',
+      action: 'sabotage',
+      targetId,
+      turn: currentTurn,
+      timestamp: Date.now()
+    })
     
     // Kafa karışıklığı gecesi etkisi - iki oy geçersiz kılabilir
     const isConfusionNight = gameData.currentNightEvent?.id === 'confusion_night'
@@ -1359,7 +1457,20 @@ function App() {
     }
 
     const gameRef = ref(database, `games/${gameRoomId}`)
+    const currentTurn = gameData.turn || 1
     const targetPlayer = gameData.players[targetId]
+    
+    // Gece aksiyonunu kaydet
+    const nightActionKey = `${playerId}_turn_${currentTurn}`
+    const nightActionRef = ref(database, `games/${gameRoomId}/nightActions/${nightActionKey}`)
+    await set(nightActionRef, {
+      playerId,
+      role: 'CHAOS_AGENT',
+      action: 'chaos',
+      targetId,
+      turn: currentTurn,
+      timestamp: Date.now()
+    })
     
     // Rastgele yeni rol seç (temel roller hariç)
     const availableRoles = ['INNOCENT', 'SHADOW', 'FORENSIC', 'PSYCHOLOGIST', 'TWINS', 'REFLECTOR']
@@ -1442,6 +1553,19 @@ function App() {
     if (myRole !== 'KILLER' || !gameRoomId) return
 
     const gameRef = ref(database, `games/${gameRoomId}`)
+    const currentTurn = gameData.turn || 1
+    
+    // Gece aksiyonunu kaydet
+    const nightActionKey = `${playerId}_turn_${currentTurn}`
+    const nightActionRef = ref(database, `games/${gameRoomId}/nightActions/${nightActionKey}`)
+    await set(nightActionRef, {
+      playerId,
+      role: 'KILLER',
+      action: 'kill',
+      targetId,
+      turn: currentTurn,
+      timestamp: Date.now()
+    })
     
     // Çoklu katil sistemi
     if (gameData.killerCount > 1) {
@@ -1635,6 +1759,30 @@ function App() {
     if (!isHost || !gameRoomId) return
 
     const votes = gameData.votes || {}
+    const alivePlayers = Object.values(gameData.players).filter(p => p.isAlive)
+    const alivePlayerIds = alivePlayers.map(p => p.id)
+    
+    // Tüm yaşayan oyuncular oy verdi mi kontrol et
+    const votedPlayerIds = Object.keys(votes)
+    const allVoted = alivePlayerIds.every(id => votedPlayerIds.includes(id))
+    
+    // Eğer tüm oyuncular oy vermediyse ve süre dolmadıysa bekle
+    if (!allVoted && gameData.votingStartTime) {
+      const elapsed = Math.floor((Date.now() - gameData.votingStartTime) / 1000)
+      const timeLeft = Math.max(0, 90 - elapsed)
+      
+      if (timeLeft > 0) {
+        console.log('⏳ Tüm oyuncular henüz oy vermedi, bekleniyor...', {
+          voted: votedPlayerIds.length,
+          total: alivePlayerIds.length,
+          timeLeft
+        })
+        return // Henüz işleme
+      }
+    }
+
+    console.log('🗳️ Oylar işleniyor...', { votes, alivePlayers: alivePlayerIds.length })
+    
     const voteCounts = {}
     
     // Sabotajlı oyları kontrol et
