@@ -390,11 +390,16 @@ function App() {
   // Firebase bağlantısını dinle
   useEffect(() => {
     if (gameRoomId) {
+      console.log('🔗 Firebase dinleme başlatılıyor...', gameRoomId)
       const gameRef = ref(database, `games/${gameRoomId}`)
       
       const unsubscribe = onValue(gameRef, (snapshot) => {
+        console.log('📡 Firebase snapshot alındı:', snapshot.exists())
         const data = snapshot.val()
+        console.log('📊 Firebase data:', data)
+        
         if (data) {
+          console.log('✅ gameData güncelleniyor:', data)
           setGameData(data)
           setPlayers(Object.values(data.players || {}))
           setGamePhase(data.gamePhase || GAME_PHASES.LOBBY)
@@ -403,14 +408,24 @@ function App() {
           
           // Kendi rolümü bul
           if (data.players && playerId && data.players[playerId]) {
+            console.log('🎭 Rolüm bulundu:', data.players[playerId].role)
             setMyRole(data.players[playerId].role)
           }
         } else {
+          console.log('❌ Firebase data yok!')
           setConnectionStatus('game_not_found')
         }
+      }, (error) => {
+        console.error('❌ Firebase dinleme hatası:', error)
+        setConnectionStatus('error')
       })
 
-      return () => off(gameRef, 'value', unsubscribe)
+      return () => {
+        console.log('🔌 Firebase dinleme kapatılıyor...')
+        off(gameRef, 'value', unsubscribe)
+      }
+    } else {
+      console.log('⚠️ gameRoomId yok, Firebase dinleme başlatılmıyor')
     }
   }, [gameRoomId, playerId])
 
@@ -2763,11 +2778,38 @@ function App() {
                 <p className="text-sm text-yellow-200">
                   ⏳ Firebase'den oyun verisi alınıyor...
                 </p>
+                <div className="mt-2 text-xs text-gray-400">
+                  <div>🔗 Firebase bağlı: {firebaseConnected ? '✅ Evet' : '❌ Hayır'}</div>
+                  <div>🏠 Oda ID: {gameRoomId}</div>
+                  <div>👤 Oyuncu ID: {playerId}</div>
+                  <div>📊 gameData: {gameData ? '✅ Var' : '❌ Yok'}</div>
+                  <div>📡 Bağlantı durumu: {connectionStatus}</div>
+                </div>
                 {!firebaseConnected && (
                   <p className="text-sm text-red-300 mt-2">
                     ⚠️ Firebase bağlantısı yok! İnternet bağlantınızı kontrol edin.
                   </p>
                 )}
+                {connectionStatus === 'game_not_found' && (
+                  <p className="text-sm text-red-300 mt-2">
+                    ❌ Oyun odası bulunamadı! Oda kodu geçersiz olabilir.
+                  </p>
+                )}
+                {connectionStatus === 'error' && (
+                  <p className="text-sm text-red-300 mt-2">
+                    🚨 Firebase bağlantı hatası! Console'u kontrol edin.
+                  </p>
+                )}
+              </div>
+              
+              {/* Debug: Manuel yenileme butonu */}
+              <div className="mt-4">
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm"
+                >
+                  🔄 Sayfayı Yenile
+                </button>
               </div>
             </div>
           </div>
