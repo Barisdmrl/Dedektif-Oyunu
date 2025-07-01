@@ -327,6 +327,23 @@ function App() {
     testConnection()
   }, [])
 
+  // Oyun fazı değişikliklerini takip et
+  useEffect(() => {
+    console.log('🎭 Oyun fazı değişti:', gamePhase)
+    if (gamePhase === GAME_PHASES.ROLE_REVEAL) {
+      console.log('✨ Roller açıklanıyor...')
+    }
+  }, [gamePhase])
+
+  // Firebase bağlantı durumunu sürekli kontrol et
+  useEffect(() => {
+    console.log('🔗 Firebase bağlantı durumu:', firebaseConnected)
+    console.log('🎮 Oyun durumu:', { gameRoomId, playerId, isHost, gamePhase })
+    if (gameData) {
+      console.log('📊 Oyun verisi:', gameData)
+    }
+  }, [firebaseConnected, gameRoomId, playerId, isHost, gamePhase, gameData])
+
   // Oylama süre takibi
   useEffect(() => {
     if (gameData && gameData.votingStartTime && gamePhase === GAME_PHASES.VOTING) {
@@ -397,6 +414,21 @@ function App() {
     }
   }, [gameRoomId, playerId])
 
+  // Gece fazına geçildiğinde otomatik kontroller
+  useEffect(() => {
+    if (gamePhase === GAME_PHASES.NIGHT && isHost && gameData) {
+      const aliveKillers = Object.values(gameData.players).filter(p => p.role === 'KILLER' && p.isAlive)
+      
+      // Eğer hiçbir katil kalmadıysa otomatik olarak gündüze geç
+      if (aliveKillers.length === 0) {
+        console.log('🌅 Hiçbir katil kalmadı, otomatik olarak gündüze geçiliyor...')
+        setTimeout(() => {
+          changeGamePhase(GAME_PHASES.DAY)
+        }, 2000) // 2 saniye bekle ki oyuncular durumu görebilsin
+      }
+    }
+  }, [gamePhase, isHost, gameData])
+
   // Oyun odası oluştur
   // Oda kodu oluşturucu fonksiyonu (5-6 haneli, harf ve sayı karışımı)
   const generateRoomCode = () => {
@@ -418,6 +450,8 @@ function App() {
   }
 
   const createGameRoom = async () => {
+    console.log('🏠 Oyun odası oluşturuluyor...')
+    
     if (!playerName.trim()) {
       alert('Lütfen isminizi girin!')
       return
@@ -426,17 +460,20 @@ function App() {
     try {
       // Özel oda kodu oluştur
       const roomId = generateRoomCode()
+      console.log('🎲 Oda kodu oluşturuldu:', roomId)
       
       // Oda kodunun benzersiz olduğundan emin ol
       const gameRef = ref(database, `games/${roomId}`)
       const snapshot = await get(gameRef)
       
       if (snapshot.exists()) {
+        console.log('⚠️ Oda kodu zaten var, yeni kod oluşturuluyor...')
         // Eğer oda kodu zaten varsa, yeni bir tane oluştur
         return createGameRoom()
       }
       
       const newPlayerId = `player_${Date.now()}`
+      console.log('👤 Oyuncu ID oluşturuldu:', newPlayerId)
       
       const gameData = {
         gamePhase: GAME_PHASES.LOBBY,
@@ -453,6 +490,7 @@ function App() {
         }
       }
 
+      console.log('💾 Firebase\'e veri yazılıyor...', gameData)
       await set(gameRef, gameData)
       
       setGameRoomId(roomId)
@@ -461,9 +499,9 @@ function App() {
       setConnectionStatus('connected')
       
       // Başarı mesajı göster
-      console.log(`🎮 Oyun odası oluşturuldu! Oda kodu: ${roomId}`)
+      console.log(`✅ Oyun odası başarıyla oluşturuldu! Oda kodu: ${roomId}`)
     } catch (error) {
-      console.error('Oyun odası oluşturulurken hata:', error)
+      console.error('❌ Oyun odası oluşturulurken hata:', error)
       alert('Oyun odası oluşturulamadı!')
     }
   }
@@ -518,185 +556,252 @@ function App() {
 
   // Oyunu başlat (sadece host)
   const startGame = async () => {
-    if (!isHost || !gameRoomId) return
+    console.log('🎮 Oyun başlatılmaya çalışılıyor...')
+    console.log('Host kontrolü:', { isHost, gameRoomId, playerId })
+    console.log('gameData durumu:', gameData)
+    
+    if (!isHost || !gameRoomId) {
+      console.log('❌ Host değil veya oda ID yok:', { isHost, gameRoomId })
+      return
+    }
+
+    if (!gameData || !gameData.players) {
+      console.log('❌ gameData veya players yok:', gameData)
+      alert('Oyun verisi yüklenemedi! Sayfayı yenileyin.')
+      return
+    }
 
     const playerList = Object.values(gameData.players)
     const playerCount = playerList.length
     
+    console.log('👥 Oyuncu bilgileri:', { playerCount, playerList })
+    
     if (playerCount < 4) {
+      console.log('❌ Yetersiz oyuncu:', playerCount)
       alert('En az 4 oyuncu gerekli!')
       return
     }
     
     if (playerCount > 12) {
+      console.log('❌ Çok fazla oyuncu:', playerCount)
       alert('En fazla 12 oyuncu olabilir!')
       return
     }
 
-    // Temel roller (her oyunda olacak)
-    let killerCount, spyCount = 1, detectiveCount = 1, securityCount = 0, innocentCount, shadowCount
-    
-    // Oyuncu sayısına göre temel rol dağılımı
-    if (playerCount === 4) {
-      killerCount = 1
-      innocentCount = 1
-      shadowCount = 1
-    } else if (playerCount >= 5 && playerCount <= 6) {
-      killerCount = 1
-      securityCount = 1
-      innocentCount = 0
-      shadowCount = playerCount - 4
-    } else if (playerCount >= 7 && playerCount <= 8) {
-      killerCount = 1
-      securityCount = 1
-      innocentCount = 0
-      shadowCount = playerCount - 4
-    } else if (playerCount >= 9 && playerCount <= 10) {
-      killerCount = 2
-      securityCount = 1
-      innocentCount = 0
-      shadowCount = playerCount - 5
-    } else if (playerCount >= 11 && playerCount <= 12) {
-      killerCount = 2
-      securityCount = 1
-      innocentCount = 0
-      shadowCount = playerCount - 5
-    } else { // 13+
-      killerCount = 3
-      securityCount = 1
-      innocentCount = 0
-      shadowCount = playerCount - 5
-    }
+    console.log('✅ Oyun başlatılıyor, roller dağıtılıyor...')
 
-    // Rastgele roller havuzu - her oyunda 2-3 ekstra rol
-    const extraRoleCount = Math.min(3, Math.max(2, Math.floor(playerCount / 4)))
-    const shuffledRandomRoles = [...RANDOM_ROLES_POOL].sort(() => Math.random() - 0.5)
-    const selectedRandomRoles = shuffledRandomRoles.slice(0, extraRoleCount)
-    
-    // Seçilen rolleri say
-    let forensicCount = 0, psychologistCount = 0, vampireCount = 0, 
-        twinsCount = 0, reflectorCount = 0, mysteriousCount = 0,
-        manipulatorCount = 0, decoyKillerCount = 0, saboteurCount = 0,
-        fakeDetectiveCount = 0, shadowGuardianCount = 0, analystCount = 0,
-        survivorCount = 0, chaosAgentCount = 0, attentionSeekerCount = 0,
-        doubleAgentCount = 0, intuitiveCount = 0
-    
-    selectedRandomRoles.forEach(role => {
-      switch(role) {
-        case 'FORENSIC': forensicCount = 1; break
-        case 'PSYCHOLOGIST': psychologistCount = 1; break
-        case 'VAMPIRE': vampireCount = 1; break
-        case 'TWINS': twinsCount = 2; break // İkizler çift gelir
-        case 'REFLECTOR': reflectorCount = 1; break
-        case 'MYSTERIOUS': mysteriousCount = 1; break
-        case 'MANIPULATOR': manipulatorCount = 1; break
-        case 'DECOY_KILLER': decoyKillerCount = 1; break
-        case 'SABOTEUR': saboteurCount = 1; break
-        case 'FAKE_DETECTIVE': fakeDetectiveCount = 1; break
-        case 'SHADOW_GUARDIAN': shadowGuardianCount = 1; break
-        case 'ANALYST': analystCount = 1; break
-        case 'SURVIVOR': survivorCount = 1; break
-        case 'CHAOS_AGENT': chaosAgentCount = 1; break
-        case 'ATTENTION_SEEKER': attentionSeekerCount = 1; break
-        case 'DOUBLE_AGENT': doubleAgentCount = 1; break
-        case 'INTUITIVE': intuitiveCount = 1; break
-      }
-    })
-    
-    // Ekstra rollerin yerini gölgelerden al
-    const totalExtraRoles = forensicCount + psychologistCount + vampireCount + twinsCount + reflectorCount + mysteriousCount +
-                           manipulatorCount + decoyKillerCount + saboteurCount + fakeDetectiveCount + shadowGuardianCount +
-                           analystCount + survivorCount + chaosAgentCount + attentionSeekerCount + doubleAgentCount + intuitiveCount
-    shadowCount = Math.max(0, shadowCount - totalExtraRoles)
-
-    // Rolleri oluştur
-    const roles = []
-    for (let i = 0; i < killerCount; i++) roles.push('KILLER')
-    for (let i = 0; i < spyCount; i++) roles.push('SPY')
-    for (let i = 0; i < detectiveCount; i++) roles.push('DETECTIVE')
-      for (let i = 0; i < securityCount; i++) roles.push('SECURITY')
-    for (let i = 0; i < forensicCount; i++) roles.push('FORENSIC')
-    for (let i = 0; i < psychologistCount; i++) roles.push('PSYCHOLOGIST')
-    for (let i = 0; i < vampireCount; i++) roles.push('VAMPIRE')
-    for (let i = 0; i < twinsCount; i++) roles.push('TWINS')
-    for (let i = 0; i < reflectorCount; i++) roles.push('REFLECTOR')
-    for (let i = 0; i < mysteriousCount; i++) roles.push('MYSTERIOUS')
-    for (let i = 0; i < manipulatorCount; i++) roles.push('MANIPULATOR')
-    for (let i = 0; i < decoyKillerCount; i++) roles.push('DECOY_KILLER')
-    for (let i = 0; i < saboteurCount; i++) roles.push('SABOTEUR')
-    for (let i = 0; i < fakeDetectiveCount; i++) roles.push('FAKE_DETECTIVE')
-    for (let i = 0; i < shadowGuardianCount; i++) roles.push('SHADOW_GUARDIAN')
-    for (let i = 0; i < analystCount; i++) roles.push('ANALYST')
-    for (let i = 0; i < survivorCount; i++) roles.push('SURVIVOR')
-    for (let i = 0; i < chaosAgentCount; i++) roles.push('CHAOS_AGENT')
-    for (let i = 0; i < attentionSeekerCount; i++) roles.push('ATTENTION_SEEKER')
-    for (let i = 0; i < doubleAgentCount; i++) roles.push('DOUBLE_AGENT')
-    for (let i = 0; i < intuitiveCount; i++) roles.push('INTUITIVE')
-    for (let i = 0; i < innocentCount; i++) roles.push('INNOCENT')
-    for (let i = 0; i < shadowCount; i++) roles.push('SHADOW')
-
-    // Oyuncuları karıştır ve rolleri ata
-    const shuffledPlayers = [...playerList].sort(() => Math.random() - 0.5)
-    const shuffledRoles = [...roles].sort(() => Math.random() - 0.5)
-    
-    // Konumları ve sembolleri karıştır
-    const shuffledLocations = [...LOCATIONS].sort(() => Math.random() - 0.5)
-    const shuffledSymbols = [...VISUAL_SYMBOLS].sort(() => Math.random() - 0.5)
-
-    const playersWithRoles = {}
-    let twinIds = [] // İkizlerin ID'leri
-    
-    shuffledPlayers.forEach((player, index) => {
-      const role = shuffledRoles[index]
-      playersWithRoles[player.id] = {
-        ...player,
-        role: role,
-        isAlive: true,
-        // Konum ve sembol sistemi
-        location: shuffledLocations[index % shuffledLocations.length],
-        visualSymbol: shuffledSymbols[index % shuffledSymbols.length],
-        // Yeni roller için özel özellikler
-        reflectorUsed: role === 'REFLECTOR' ? false : undefined,
-        doubleVoteUsed: false, // İkizler için
-        vampireExtraLife: role === 'VAMPIRE' ? false : undefined,
-        mysteriousCurrentRole: role === 'MYSTERIOUS' ? 'INNOCENT' : undefined, // Başlangıçta masum
-        // Yeni roller için özellikler
-        sabotageUsed: role === 'SABOTEUR' ? false : undefined,
-        chaosUsed: role === 'CHAOS_AGENT' ? false : undefined,
-        doubleAgentChoice: role === 'DOUBLE_AGENT' ? null : undefined, // 'good' veya 'evil'
-        manipulatedVotes: [], // Manipülatör için
-        protectedPlayers: [], // Gölge koruyucu için
-        votesNullified: [] // Sabotajcı için
-      }
+    try {
+      // Temel roller (her oyunda olacak)
+      let killerCount, spyCount = 1, detectiveCount = 1, securityCount = 0, innocentCount, shadowCount
       
-      // İkizleri kaydet
-      if (role === 'TWINS') {
-        twinIds.push(player.id)
+      // Oyuncu sayısına göre temel rol dağılımı
+      if (playerCount === 4) {
+        killerCount = 1
+        innocentCount = 1
+        shadowCount = 1
+      } else if (playerCount >= 5 && playerCount <= 6) {
+        killerCount = 1
+        securityCount = 1
+        innocentCount = 0
+        shadowCount = playerCount - 4
+      } else if (playerCount >= 7 && playerCount <= 8) {
+        killerCount = 1
+        securityCount = 1
+        innocentCount = 0
+        shadowCount = playerCount - 4
+      } else if (playerCount >= 9 && playerCount <= 10) {
+        killerCount = 2
+        securityCount = 1
+        innocentCount = 0
+        shadowCount = playerCount - 5
+      } else if (playerCount >= 11 && playerCount <= 12) {
+        killerCount = 2
+        securityCount = 1
+        innocentCount = 0
+        shadowCount = playerCount - 5
+      } else { // 13+
+        killerCount = 3
+        securityCount = 1
+        innocentCount = 0
+        shadowCount = playerCount - 5
       }
-    })
-    
-    // İkizleri birbirine bağla
-    if (twinIds.length === 2) {
-      playersWithRoles[twinIds[0]].twinId = twinIds[1]
-      playersWithRoles[twinIds[1]].twinId = twinIds[0]
-    }
 
-    // Oyun durumunu güncelle
-    const gameRef = ref(database, `games/${gameRoomId}`)
-    await update(gameRef, {
-      gamePhase: GAME_PHASES.ROLE_REVEAL,
-      players: playersWithRoles,
-      currentPlayerIndex: 0,
-      turn: 1,
-      startedAt: Date.now(),
-      killerCount,
-      maxPlayers: playerCount,
-      // Rastgele roller havuzu bilgisi
-      activeRandomRoles: selectedRandomRoles,
-      // Gece olayları sistemi
-      nightEvents: [],
-      currentNightEvent: null
-    })
+      // Rastgele roller havuzu - her oyunda 2-3 ekstra rol
+      const extraRoleCount = Math.min(3, Math.max(2, Math.floor(playerCount / 4)))
+      const shuffledRandomRoles = [...RANDOM_ROLES_POOL].sort(() => Math.random() - 0.5)
+      const selectedRandomRoles = shuffledRandomRoles.slice(0, extraRoleCount)
+      
+      // Seçilen rolleri say
+      let forensicCount = 0, psychologistCount = 0, vampireCount = 0, 
+          twinsCount = 0, reflectorCount = 0, mysteriousCount = 0,
+          manipulatorCount = 0, decoyKillerCount = 0, saboteurCount = 0,
+          fakeDetectiveCount = 0, shadowGuardianCount = 0, analystCount = 0,
+          survivorCount = 0, chaosAgentCount = 0, attentionSeekerCount = 0,
+          doubleAgentCount = 0, intuitiveCount = 0
+      
+      selectedRandomRoles.forEach(role => {
+        switch(role) {
+          case 'FORENSIC': forensicCount = 1; break
+          case 'PSYCHOLOGIST': psychologistCount = 1; break
+          case 'VAMPIRE': vampireCount = 1; break
+          case 'TWINS': twinsCount = 2; break // İkizler çift gelir
+          case 'REFLECTOR': reflectorCount = 1; break
+          case 'MYSTERIOUS': mysteriousCount = 1; break
+          case 'MANIPULATOR': manipulatorCount = 1; break
+          case 'DECOY_KILLER': decoyKillerCount = 1; break
+          case 'SABOTEUR': saboteurCount = 1; break
+          case 'FAKE_DETECTIVE': fakeDetectiveCount = 1; break
+          case 'SHADOW_GUARDIAN': shadowGuardianCount = 1; break
+          case 'ANALYST': analystCount = 1; break
+          case 'SURVIVOR': survivorCount = 1; break
+          case 'CHAOS_AGENT': chaosAgentCount = 1; break
+          case 'ATTENTION_SEEKER': attentionSeekerCount = 1; break
+          case 'DOUBLE_AGENT': doubleAgentCount = 1; break
+          case 'INTUITIVE': intuitiveCount = 1; break
+        }
+      })
+      
+      // Ekstra rollerin yerini gölgelerden al
+      const totalExtraRoles = forensicCount + psychologistCount + vampireCount + twinsCount + reflectorCount + mysteriousCount +
+                             manipulatorCount + decoyKillerCount + saboteurCount + fakeDetectiveCount + shadowGuardianCount +
+                             analystCount + survivorCount + chaosAgentCount + attentionSeekerCount + doubleAgentCount + intuitiveCount
+      shadowCount = Math.max(0, shadowCount - totalExtraRoles)
+
+      // Rolleri oluştur
+      const roles = []
+      for (let i = 0; i < killerCount; i++) roles.push('KILLER')
+      for (let i = 0; i < spyCount; i++) roles.push('SPY')
+      for (let i = 0; i < detectiveCount; i++) roles.push('DETECTIVE')
+      for (let i = 0; i < securityCount; i++) roles.push('SECURITY')
+      for (let i = 0; i < forensicCount; i++) roles.push('FORENSIC')
+      for (let i = 0; i < psychologistCount; i++) roles.push('PSYCHOLOGIST')
+      for (let i = 0; i < vampireCount; i++) roles.push('VAMPIRE')
+      for (let i = 0; i < twinsCount; i++) roles.push('TWINS')
+      for (let i = 0; i < reflectorCount; i++) roles.push('REFLECTOR')
+      for (let i = 0; i < mysteriousCount; i++) roles.push('MYSTERIOUS')
+      for (let i = 0; i < manipulatorCount; i++) roles.push('MANIPULATOR')
+      for (let i = 0; i < decoyKillerCount; i++) roles.push('DECOY_KILLER')
+      for (let i = 0; i < saboteurCount; i++) roles.push('SABOTEUR')
+      for (let i = 0; i < fakeDetectiveCount; i++) roles.push('FAKE_DETECTIVE')
+      for (let i = 0; i < shadowGuardianCount; i++) roles.push('SHADOW_GUARDIAN')
+      for (let i = 0; i < analystCount; i++) roles.push('ANALYST')
+      for (let i = 0; i < survivorCount; i++) roles.push('SURVIVOR')
+      for (let i = 0; i < chaosAgentCount; i++) roles.push('CHAOS_AGENT')
+      for (let i = 0; i < attentionSeekerCount; i++) roles.push('ATTENTION_SEEKER')
+      for (let i = 0; i < doubleAgentCount; i++) roles.push('DOUBLE_AGENT')
+      for (let i = 0; i < intuitiveCount; i++) roles.push('INTUITIVE')
+      for (let i = 0; i < innocentCount; i++) roles.push('INNOCENT')
+      for (let i = 0; i < shadowCount; i++) roles.push('SHADOW')
+
+      // Rol sayısı kontrolü
+      console.log('🎭 Rol dağılımı:', {
+        killerCount, spyCount, detectiveCount, securityCount, 
+        forensicCount, psychologistCount, vampireCount, twinsCount,
+        reflectorCount, mysteriousCount, manipulatorCount, decoyKillerCount,
+        saboteurCount, fakeDetectiveCount, shadowGuardianCount, analystCount,
+        survivorCount, chaosAgentCount, attentionSeekerCount, doubleAgentCount,
+        intuitiveCount, innocentCount, shadowCount,
+        totalRoles: roles.length, playerCount
+      })
+
+      if (roles.length !== playerCount) {
+        alert(`Hata: Rol sayısı (${roles.length}) oyuncu sayısına (${playerCount}) eşit değil!`)
+        return
+      }
+
+      // Oyuncuları karıştır ve rolleri ata
+      const shuffledPlayers = [...playerList].sort(() => Math.random() - 0.5)
+      const shuffledRoles = [...roles].sort(() => Math.random() - 0.5)
+      
+      // Konumları ve sembolleri karıştır
+      const shuffledLocations = [...LOCATIONS].sort(() => Math.random() - 0.5)
+      const shuffledSymbols = [...VISUAL_SYMBOLS].sort(() => Math.random() - 0.5)
+
+      const playersWithRoles = {}
+      let twinIds = [] // İkizlerin ID'leri
+      
+      shuffledPlayers.forEach((player, index) => {
+        const role = shuffledRoles[index]
+        const playerData = {
+          ...player,
+          role: role,
+          isAlive: true,
+          // Konum ve sembol sistemi
+          location: shuffledLocations[index % shuffledLocations.length],
+          visualSymbol: shuffledSymbols[index % shuffledSymbols.length],
+          // Yeni roller için özel özellikler (sadece gerekli olanlar)
+          doubleVoteUsed: false, // İkizler için
+          manipulatedVotes: [], // Manipülatör için
+          protectedPlayers: [], // Gölge koruyucu için
+          votesNullified: [] // Sabotajcı için
+        }
+
+        // Rol-spesifik özellikler (sadece gerekli olanlara ekle)
+        if (role === 'REFLECTOR') {
+          playerData.reflectorUsed = false
+        }
+        if (role === 'VAMPIRE') {
+          playerData.vampireExtraLife = false
+        }
+        if (role === 'MYSTERIOUS') {
+          playerData.mysteriousCurrentRole = 'INNOCENT' // Başlangıçta masum
+        }
+        if (role === 'SABOTEUR') {
+          playerData.sabotageUsed = false
+        }
+        if (role === 'CHAOS_AGENT') {
+          playerData.chaosUsed = false
+        }
+        if (role === 'DOUBLE_AGENT') {
+          playerData.doubleAgentChoice = null // 'good' veya 'evil'
+        }
+
+        playersWithRoles[player.id] = playerData
+        
+        // İkizleri kaydet
+        if (role === 'TWINS') {
+          twinIds.push(player.id)
+        }
+      })
+      
+      // İkizleri birbirine bağla
+      if (twinIds.length === 2) {
+        playersWithRoles[twinIds[0]].twinId = twinIds[1]
+        playersWithRoles[twinIds[1]].twinId = twinIds[0]
+      }
+
+      // Oyun durumunu güncelle
+      const gameRef = ref(database, `games/${gameRoomId}`)
+      console.log('📝 Firebase güncelleme yapılıyor...', {
+        gamePhase: GAME_PHASES.ROLE_REVEAL,
+        playerCount: Object.keys(playersWithRoles).length,
+        turn: 1
+      })
+      
+      await update(gameRef, {
+        gamePhase: GAME_PHASES.ROLE_REVEAL,
+        players: playersWithRoles,
+        currentPlayerIndex: 0,
+        turn: 1,
+        startedAt: Date.now(),
+        killerCount,
+        maxPlayers: playerCount,
+        // Rastgele roller havuzu bilgisi
+        activeRandomRoles: selectedRandomRoles,
+        // Gece olayları sistemi
+        nightEvents: [],
+        currentNightEvent: null,
+        // Oylama ve oyun durumu
+        votes: {},
+        protectedPlayer: null,
+        votingStartTime: null
+      })
+      
+      console.log('✅ Firebase güncelleme tamamlandı! Oyun ROLE_REVEAL fazına geçti.')
+    } catch (error) {
+      console.error('❌ Oyun başlatılırken hata:', error)
+      alert('Oyun başlatılamadı! Lütfen tekrar deneyin.')
+    }
   }
 
   // Sonraki oyuncuya geç (rol açıklama)
@@ -711,10 +816,13 @@ function App() {
       })
     } else {
       // Sırasıyla fazlara geç
+      console.log('🎮 Rol açıklama tamamlandı, sonraki faza geçiliyor...')
       const gameRef = ref(database, `games/${gameRoomId}`)
       const hasSecurity = Object.values(gameData.players).some(p => p.role === 'SECURITY' && p.isAlive)
       const hasForensic = Object.values(gameData.players).some(p => p.role === 'FORENSIC' && p.isAlive)
       const hasPsychologist = Object.values(gameData.players).some(p => p.role === 'PSYCHOLOGIST' && p.isAlive)
+      
+      console.log('🔍 Rol kontrolleri:', { hasSecurity, hasForensic, hasPsychologist, turn: gameData.turn })
       
       if (hasSecurity) {
         await update(gameRef, { gamePhase: GAME_PHASES.SECURITY })
@@ -749,6 +857,7 @@ function App() {
         } else if (hasChaosAgent) {
           await update(gameRef, { gamePhase: GAME_PHASES.CHAOS_AGENT })
         } else {
+          console.log('🌙 Gece fazına geçiliyor...')
           await update(gameRef, { gamePhase: GAME_PHASES.NIGHT })
         }
       }
@@ -1318,7 +1427,7 @@ function App() {
           updates.killerVotes = null
           updates.protectedPlayer = null
           updates.lastNightResult = 'protected'
-          } else if (targetPlayer.role === 'REFLECTOR' && !targetPlayer.reflectorUsed) {
+          } else if (targetPlayer.role === 'REFLECTOR' && targetPlayer.reflectorUsed === false) {
             // Yansıtıcı saldırıyı geri yansıtır - rastgele bir katili öldür
             const randomKiller = killers[Math.floor(Math.random() * killers.length)]
             updates[`players/${randomKiller.id}/isAlive`] = false
@@ -1346,7 +1455,7 @@ function App() {
           const nightEvent = determineNightEvent()
           if (nightEvent) {
             await applyNightEventEffects(nightEvent)
-          }
+        }
         
         await update(gameRef, updates)
       }
@@ -1864,7 +1973,7 @@ function App() {
                 className="btn-primary animate-glow"
               >
                 🎭 Tüm Roller
-              </button>
+            </button>
             </div>
           </div>
         </header>
@@ -2001,8 +2110,8 @@ function App() {
                 <div className="flex justify-between items-center">
                   <div>
                     <h2 className="text-5xl font-bold mb-2 bg-gradient-to-r from-yellow-400 to-red-400 bg-clip-text text-transparent">
-                      📖 OYUN KURALLARI
-                    </h2>
+                  📖 OYUN KURALLARI
+                </h2>
                     <p className="text-gray-300 text-lg">Ters Dedektif: Katili Bul - Detaylı Oyun Rehberi</p>
                   </div>
                   <button
@@ -2013,70 +2122,70 @@ function App() {
                   </button>
                 </div>
               </div>
-
+              
               {/* Content - Scrollable */}
               <div className="overflow-y-auto max-h-[calc(95vh-140px)] p-6">
                 
                 {/* Ana Oyun Bilgileri */}
                 <div className="grid lg:grid-cols-2 gap-8 mb-8">
                   {/* Sol Kolon */}
-                  <div className="space-y-6">
+                <div className="space-y-6">
                     <div className="bg-gradient-to-br from-purple-900/50 to-blue-900/50 p-6 rounded-xl border border-purple-500/30">
                       <h3 className="font-bold text-2xl mb-4 text-purple-300">🎯 OYUNUN AMACI</h3>
                       <p className="text-gray-300 leading-relaxed text-lg mb-4">
                         Bu bir sosyal çıkarım oyunudur. İyi takım (Dedektif, Casus, Güvenlik ve diğer iyi roller) katili bulmaya çalışırken, 
-                        katil yakalanmamaya ve herkesi elemeye çalışır.
-                      </p>
+                      katil yakalanmamaya ve herkesi elemeye çalışır.
+                    </p>
                       <div className="bg-gray-800/50 p-4 rounded-lg">
                         <h4 className="font-bold text-yellow-300 mb-2">🎮 Oyun Türü</h4>
                         <p className="text-sm text-gray-300">Sosyal çıkarım, blöf, strateji ve takım çalışması gerektiren multiplayer oyun</p>
                       </div>
-                    </div>
+                  </div>
 
                     <div className="bg-gradient-to-br from-green-900/50 to-teal-900/50 p-6 rounded-xl border border-green-500/30">
                       <h3 className="font-bold text-2xl mb-4 text-green-300">🎮 OYNANIŞIN SIRASI</h3>
                       <div className="space-y-4">
-                        <div className="flex items-start gap-3">
+                      <div className="flex items-start gap-3">
                           <span className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-sm px-3 py-2 rounded-lg font-bold min-w-[2rem] text-center">1</span>
-                          <div>
+                        <div>
                             <strong className="text-yellow-300 text-lg">Lobby Aşaması</strong>
                             <p className="text-gray-300">Oyuncular oda kodunu paylaşarak katılır (minimum 4 kişi)</p>
-                          </div>
                         </div>
-                        <div className="flex items-start gap-3">
+                      </div>
+                      <div className="flex items-start gap-3">
                           <span className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-sm px-3 py-2 rounded-lg font-bold min-w-[2rem] text-center">2</span>
-                          <div>
+                        <div>
                             <strong className="text-yellow-300 text-lg">Rol Dağıtımı</strong>
                             <p className="text-gray-300">Her oyuncu gizlice kendi rolünü öğrenir</p>
-                          </div>
                         </div>
-                        <div className="flex items-start gap-3">
+                      </div>
+                      <div className="flex items-start gap-3">
                           <span className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-sm px-3 py-2 rounded-lg font-bold min-w-[2rem] text-center">3</span>
-                          <div>
+                        <div>
                             <strong className="text-yellow-300 text-lg">Gece Fazı</strong>
                             <p className="text-gray-300">Roller gece yeteneklerini kullanır (katil kurbanını seçer)</p>
-                          </div>
                         </div>
-                        <div className="flex items-start gap-3">
+                      </div>
+                      <div className="flex items-start gap-3">
                           <span className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-sm px-3 py-2 rounded-lg font-bold min-w-[2rem] text-center">4</span>
-                          <div>
+                        <div>
                             <strong className="text-yellow-300 text-lg">Gündüz Fazı</strong>
                             <p className="text-gray-300">Herkes tartışır, dedektif ipucu alabilir</p>
-                          </div>
                         </div>
-                        <div className="flex items-start gap-3">
+                      </div>
+                      <div className="flex items-start gap-3">
                           <span className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-sm px-3 py-2 rounded-lg font-bold min-w-[2rem] text-center">5</span>
-                          <div>
+                        <div>
                             <strong className="text-yellow-300 text-lg">Oylama Fazı</strong>
                             <p className="text-gray-300">En çok oy alan oyuncu elenir</p>
-                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
+                </div>
 
                   {/* Sağ Kolon */}
-                  <div className="space-y-6">
+                <div className="space-y-6">
                     <div className="bg-gradient-to-br from-red-900/50 to-orange-900/50 p-6 rounded-xl border border-red-500/30">
                       <h3 className="font-bold text-2xl mb-4 text-red-300">🏆 KAZANMA KOŞULLARI</h3>
                       <div className="space-y-4">
@@ -2101,15 +2210,15 @@ function App() {
 
                     <div className="bg-gradient-to-br from-yellow-900/50 to-amber-900/50 p-6 rounded-xl border border-yellow-500/30">
                       <h3 className="font-bold text-2xl mb-4 text-yellow-300">⚠️ ÖNEMLİ KURALLAR</h3>
-                      <div className="space-y-3">
+                    <div className="space-y-3">
                         <div className="flex items-start gap-3">
                           <span className="text-yellow-400 text-xl">🔒</span>
                           <span className="text-gray-300">Roller gizli tutulmalıdır</span>
-                        </div>
+                      </div>
                         <div className="flex items-start gap-3">
                           <span className="text-yellow-400 text-xl">🕵️</span>
                           <span className="text-gray-300">Casus katili bilir ama belli etmemelidir</span>
-                        </div>
+                      </div>
                         <div className="flex items-start gap-3">
                           <span className="text-yellow-400 text-xl">🔍</span>
                           <span className="text-gray-300">Dedektif ipuçlarını dikkatlice değerlendirmelidir</span>
@@ -2124,8 +2233,8 @@ function App() {
                         </div>
                       </div>
                     </div>
+                    </div>
                   </div>
-                </div>
 
                 {/* Dinamik Özellikler */}
                 <div className="bg-gradient-to-r from-orange-900/50 to-red-900/50 p-6 rounded-xl border border-orange-500/30 mb-8">
@@ -2136,28 +2245,28 @@ function App() {
                         <h4 className="font-bold text-yellow-300 mb-2 text-lg">🎭 Rastgele Roller</h4>
                         <p className="text-gray-300 mb-2">Her oyunda 2-3 ekstra rol aktif olur</p>
                         <p className="text-xs text-yellow-400">Hangi rollerin aktif olduğu lobby'de gösterilir</p>
-                      </div>
-                      
+                  </div>
+
                       <div className="bg-gray-800/50 p-4 rounded-lg">
                         <h4 className="font-bold text-purple-300 mb-2 text-lg">🌙 Gece Olayları</h4>
                         <p className="text-gray-300 mb-2">%30 ihtimalle gece özel olaylar yaşanır</p>
                         <p className="text-xs text-purple-400">Rollerin güçlerini artırabilir veya kısıtlayabilir</p>
-                      </div>
+                    </div>
                       
                       <div className="bg-gray-800/50 p-4 rounded-lg">
                         <h4 className="font-bold text-blue-300 mb-2 text-lg">📍 Konum Sistemi</h4>
                         <p className="text-gray-300 mb-2">Her oyuncunun bir konumu var</p>
                         <p className="text-xs text-blue-400">İpuçlarda konum bilgileri kullanılır</p>
-                      </div>
-                    </div>
+                  </div>
+                </div>
                     
                     <div className="space-y-4">
                       <div className="bg-gray-800/50 p-4 rounded-lg">
                         <h4 className="font-bold text-green-300 mb-2 text-lg">👁️ Görsel Semboller</h4>
                         <p className="text-gray-300 mb-2">Her oyuncunun görsel özelliği var</p>
                         <p className="text-xs text-green-400">İpuçlarda görsel özellikler kullanılır</p>
-                      </div>
-                      
+              </div>
+              
                       <div className="bg-gray-800/50 p-4 rounded-lg">
                         <h4 className="font-bold text-red-300 mb-2 text-lg">⚠️ Sahte İpuçları</h4>
                         <p className="text-gray-300 mb-2">%30 ihtimalle yanıltıcı ipuçları</p>
@@ -2341,13 +2450,13 @@ function App() {
               {/* Footer */}
               <div className="bg-gradient-to-r from-orange-900/80 to-red-900/80 p-4 border-t border-orange-500/30">
                 <div className="text-center">
-                  <button
-                    onClick={() => setShowRules(false)}
+                <button
+                  onClick={() => setShowRules(false)}
                     className="bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 px-8 py-3 rounded-xl font-bold text-white transition-all transform hover:scale-105 shadow-lg"
-                  >
+                >
                     ✅ Anladım, Oyuna Başlayalım!
-                  </button>
-                </div>
+                </button>
+              </div>
               </div>
 
             </div>
@@ -2597,6 +2706,31 @@ function App() {
     : []
   const currentTurnDeadPlayers = deadPlayers.filter(p => p.turnDied === gameData.turn)
 
+  // Oyun kazanma durumlarını kontrol et
+  useEffect(() => {
+    if (gameData && isHost && gamePhase !== GAME_PHASES.LOBBY && gamePhase !== GAME_PHASES.ROLE_REVEAL) {
+      const alivePlayers = Object.values(gameData.players).filter(p => p.isAlive)
+      const aliveKillers = alivePlayers.filter(p => p.role === 'KILLER')
+      const aliveGoodTeam = alivePlayers.filter(p => 
+        ['DETECTIVE', 'SPY', 'SECURITY', 'INNOCENT', 'FORENSIC', 'PSYCHOLOGIST', 'TWINS', 'REFLECTOR', 'SHADOW_GUARDIAN', 'ANALYST', 'INTUITIVE'].includes(p.role)
+      )
+      const aliveEvilTeam = alivePlayers.filter(p => 
+        ['KILLER', 'VAMPIRE', 'MANIPULATOR', 'DECOY_KILLER', 'SABOTEUR', 'FAKE_DETECTIVE'].includes(p.role)
+      )
+      
+      // Katiller kazandı (iyi takım ≤ kötü takım)
+      if (aliveKillers.length > 0 && aliveGoodTeam.length <= aliveEvilTeam.length) {
+        console.log('💀 Katiller kazandı!')
+        changeGamePhase(GAME_PHASES.GAME_OVER)
+      }
+      // İyi takım kazandı (hiç katil kalmadı)
+      else if (aliveKillers.length === 0 && aliveGoodTeam.length > 0) {
+        console.log('👮 İyi takım kazandı!')
+        changeGamePhase(GAME_PHASES.GAME_OVER)
+      }
+    }
+  }, [gameData, isHost, gamePhase])
+
   return (
     <div className="min-h-screen text-white relative">
       <ParticleEffect />
@@ -2707,7 +2841,13 @@ function App() {
                 <div className="text-center">
                   {isHost ? (
                   <button
-                    onClick={startGame}
+                    onClick={() => {
+                      console.log('🔥 Oyun başlat butonuna tıklandı!')
+                      console.log('Buton durumu:', { isHost, playersLength: players.length, gameRoomId, playerId })
+                      console.log('Buton disabled mi?', players.length < 4)
+                      console.log('gameData var mı?', !!gameData)
+                      startGame()
+                    }}
                     disabled={players.length < 4}
                       className={`w-full text-xl ${players.length < 4 ? 'btn-ghost cursor-not-allowed opacity-50' : 'btn-success animate-pulse-custom'}`}
                   >
@@ -3367,6 +3507,19 @@ function App() {
                       }
                     </p>
                     <div className="animate-pulse text-6xl mt-4">😴</div>
+                    
+                    {/* Debug: Host için gece fazını atla butonu */}
+                    {isHost && (
+                      <div className="mt-6">
+                        <p className="text-xs text-gray-500 mb-2">Debug: Eğer katil hareket etmiyorsa</p>
+                        <button
+                          onClick={() => changeGamePhase(GAME_PHASES.DAY)}
+                          className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded text-sm"
+                        >
+                          🌅 Gündüze Geç (Debug)
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
