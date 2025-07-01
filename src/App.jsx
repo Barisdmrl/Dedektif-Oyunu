@@ -2751,6 +2751,28 @@ function App() {
         {firebaseConnected ? '🟢 Bağlı' : '🔴 Bağlantı Yok'}
       </div>
       
+      {/* Loading state - gameData yüklenene kadar */}
+      {!gameData ? (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin text-6xl mb-4">🔄</div>
+            <h2 className="text-2xl font-bold mb-2">Oyun verisi yükleniyor...</h2>
+            <p className="text-gray-400">Oda kodu: <code className="text-purple-300">{gameRoomId}</code></p>
+            <div className="mt-4">
+              <div className="bg-yellow-900/20 p-4 rounded-lg border border-yellow-500/30 max-w-md mx-auto">
+                <p className="text-sm text-yellow-200">
+                  ⏳ Firebase'den oyun verisi alınıyor...
+                </p>
+                {!firebaseConnected && (
+                  <p className="text-sm text-red-300 mt-2">
+                    ⚠️ Firebase bağlantısı yok! İnternet bağlantınızı kontrol edin.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className="min-h-screen">
         <div className="container mx-auto px-4 py-8">
           {/* Header */}
@@ -4086,6 +4108,7 @@ function App() {
           )}
         </div>
       </div>
+      )}
     </div>
   )
 }
