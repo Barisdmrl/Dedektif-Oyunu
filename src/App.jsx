@@ -303,6 +303,10 @@ function App() {
   // Psikolog seçimleri
   const [selectedPlayer1, setSelectedPlayer1] = useState(null)
   const [selectedPlayer2, setSelectedPlayer2] = useState(null)
+  
+  // Gece olayı bildirimi
+  const [showNightEventNotification, setShowNightEventNotification] = useState(false)
+  const [nightEventMessage, setNightEventMessage] = useState('')
 
   // Firebase bağlantısı test et
   useEffect(() => {
@@ -459,10 +463,10 @@ function App() {
         const nightActions = gameData.nightActions || {}
         const currentTurn = gameData.turn || 1
         
-        // Bu turda aksiyon alması gereken roller
+        // Bu turda aksiyon alması gereken roller (sadece oyunda olanlar)
         const activeNightRoles = alivePlayers.filter(p => {
           const nightRoles = ['KILLER', 'VAMPIRE', 'MANIPULATOR', 'SABOTEUR', 'SHADOW_GUARDIAN', 'CHAOS_AGENT']
-          return nightRoles.includes(p.role)
+          return nightRoles.includes(p.role) && isRoleInGame(p.role)
         })
         
         // Tüm aktif roller aksiyon aldı mı kontrol et
@@ -498,6 +502,35 @@ function App() {
       }
     }
   }, [gamePhase, isHost, gameData])
+
+  // Oyunda olan rolleri kontrol et
+  const isRoleInGame = (role) => {
+    if (!gameData || !gameData.players) return false
+    return Object.values(gameData.players).some(player => player.role === role)
+  }
+
+  // Gece olayı bildirimi - herkese göster
+  useEffect(() => {
+    if (gameData && gameData.currentNightEvent && gamePhase === GAME_PHASES.NIGHT) {
+      const eventKey = `nightEvent_${gameData.turn}_${gameData.currentNightEvent.id}`
+      const shownEvents = JSON.parse(localStorage.getItem('shownNightEvents') || '[]')
+      
+      if (!shownEvents.includes(eventKey)) {
+        setNightEventMessage(`🌙 ${gameData.currentNightEvent.name} 
+${gameData.currentNightEvent.description}`)
+        setShowNightEventNotification(true)
+        
+        // Bildirimi gösterildi olarak işaretle
+        shownEvents.push(eventKey)
+        localStorage.setItem('shownNightEvents', JSON.stringify(shownEvents))
+        
+        // 5 saniye sonra bildirimi kapat
+        setTimeout(() => {
+          setShowNightEventNotification(false)
+        }, 5000)
+      }
+    }
+  }, [gameData?.currentNightEvent, gamePhase, gameData?.turn])
 
   // Oyun kazanma durumlarını kontrol et
   useEffect(() => {
@@ -2970,6 +3003,19 @@ function App() {
         }`}></div>
         {firebaseConnected ? '🟢 Bağlı' : '🔴 Bağlantı Yok'}
       </div>
+
+      {/* Gece olayı göstergesi - Sol üst */}
+      {gameData && gameData.currentNightEvent && (
+        <div className="fixed top-16 left-4 bg-purple-900/90 backdrop-blur-sm p-3 rounded-lg border border-purple-500/50 z-40 max-w-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">{gameData.currentNightEvent.name.split(' ')[0]}</span>
+            <div>
+              <p className="text-purple-300 font-bold text-sm">{gameData.currentNightEvent.name}</p>
+              <p className="text-gray-300 text-xs">{gameData.currentNightEvent.description}</p>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Loading state - gameData yüklenene kadar */}
       {!gameData ? (
@@ -3449,7 +3495,7 @@ function App() {
                     )}
                     
                     <div className="space-y-2">
-                      {alivePlayers.filter(p => p.role !== 'VAMPIRE' && p.role !== 'KILLER').map(player => (
+                      {alivePlayers.filter(p => p.role !== 'VAMPIRE' && p.role !== 'KILLER' && isRoleInGame(p.role)).map(player => (
                         <button
                           key={player.id}
                           onClick={() => hypnotizePlayer(player.id)}
@@ -3500,7 +3546,7 @@ function App() {
                       <div>
                         <h3 className="text-lg font-bold mb-2">Hedef Oyuncu:</h3>
                         <div className="space-y-2">
-                          {alivePlayers.filter(p => p.role !== 'MANIPULATOR').map(player => (
+                          {alivePlayers.filter(p => p.role !== 'MANIPULATOR' && isRoleInGame(p.role)).map(player => (
                             <button
                               key={player.id}
                               onClick={() => setSelectedPlayer1(player.id)}
@@ -3519,7 +3565,7 @@ function App() {
                       <div>
                         <h3 className="text-lg font-bold mb-2">Yönlendirilecek:</h3>
                         <div className="space-y-2">
-                          {alivePlayers.filter(p => p.id !== selectedPlayer1).map(player => (
+                          {alivePlayers.filter(p => p.id !== selectedPlayer1 && isRoleInGame(p.role)).map(player => (
                             <button
                               key={player.id}
                               onClick={() => setSelectedPlayer2(player.id)}
@@ -3577,7 +3623,7 @@ function App() {
                     </div>
                     
                     <div className="space-y-2">
-                      {alivePlayers.filter(p => p.role !== 'SHADOW_GUARDIAN').map(player => (
+                      {alivePlayers.filter(p => p.role !== 'SHADOW_GUARDIAN' && isRoleInGame(p.role)).map(player => (
                         <button
                           key={player.id}
                           onClick={() => shadowProtect(player.id)}
@@ -3621,7 +3667,7 @@ function App() {
                     
                     {!gameData.players[playerId]?.sabotageUsed ? (
                       <div className="space-y-2">
-                        {alivePlayers.filter(p => p.role !== 'SABOTEUR').map(player => (
+                        {alivePlayers.filter(p => p.role !== 'SABOTEUR' && isRoleInGame(p.role)).map(player => (
                           <button
                             key={player.id}
                             onClick={() => sabotageVote(player.id)}
@@ -3666,7 +3712,7 @@ function App() {
                     </div>
                     
                     <div className="space-y-2">
-                      {alivePlayers.filter(p => p.role !== 'SECURITY').map(player => (
+                      {alivePlayers.filter(p => p.role !== 'SECURITY' && isRoleInGame(p.role)).map(player => (
                         <button
                           key={player.id}
                           onClick={() => protectPlayer(player.id)}
@@ -3740,7 +3786,7 @@ function App() {
                     
                     {!(gameData.currentNightEvent && gameData.currentNightEvent.effect === 'protect_all') && (
                     <div className="space-y-2">
-                      {alivePlayers.filter(p => p.role !== 'KILLER').map(player => (
+                      {alivePlayers.filter(p => p.role !== 'KILLER' && isRoleInGame(p.role)).map(player => (
                         <button
                           key={player.id}
                           onClick={() => killPlayer(player.id)}
@@ -4252,7 +4298,7 @@ function App() {
                         <p className="mb-4 text-gray-300 text-center">Hangi oyuncunun rolünü değiştirmek istiyorsunuz?</p>
                         
                         <div className="space-y-3 mb-6">
-                          {alivePlayers.filter(p => p.id !== playerId).map(player => (
+                          {alivePlayers.filter(p => p.id !== playerId && isRoleInGame(p.role)).map(player => (
                             <button
                               key={player.id}
                               onClick={() => useChaosPower(player.id)}
@@ -4417,6 +4463,23 @@ function App() {
           )}
         </div>
       </div>
+      )}
+
+      {/* Gece Olayı Bildirimi - Herkese */}
+      {showNightEventNotification && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-purple-900 p-6 rounded-xl border-2 border-purple-500 max-w-md mx-4 text-center animate-scaleIn">
+            <div className="text-4xl mb-4">🌙</div>
+            <div className="text-white font-bold text-lg mb-2">Gece Olayı!</div>
+            <div className="text-purple-200 whitespace-pre-line">{nightEventMessage}</div>
+            <button
+              onClick={() => setShowNightEventNotification(false)}
+              className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded transition-colors"
+            >
+              Tamam
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )
